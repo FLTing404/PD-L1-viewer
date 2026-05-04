@@ -23,8 +23,9 @@ const MAX_ZOOM = 8;
 const IDENTITY: ZoomState = { zoom: 1, panX: 0, panY: 0 };
 
 const POSITIVE_COLOR = "#b85a5a";
-const BORDERLINE_COLOR = "#c79a57";
 const NEGATIVE_COLOR = "#5e7ea8";
+/** patch.json `patch_pred_tps`（0–1）在圆环上的填充色 */
+const PRED_TPS_RING_COLOR = "#e0786e";
 const OSD_CORNER_LABEL =
   "pointer-events-none absolute left-2 top-2 z-10 rounded bg-black/55 px-2 py-0.5 text-[12px] font-medium text-white/90 backdrop-blur-sm";
 
@@ -194,17 +195,11 @@ function PatchCellStatsInline({ patchId }: { patchId: string }) {
     return () => ro.disconnect();
   }, [patchId, cellsStatus]);
 
-  const segments: DonutSegment[] = [
-    { value: stats.positive, color: POSITIVE_COLOR },
-    { value: stats.borderline, color: BORDERLINE_COLOR },
-    {
-      value: Math.max(0, stats.negative - stats.borderline / 2),
-      color: NEGATIVE_COLOR,
-    },
+  const predTps = patch ? clamp(patch.patchPredTps, 0, 1) : 0;
+  const donutSegments: DonutSegment[] = [
+    { value: predTps, color: PRED_TPS_RING_COLOR },
+    { value: Math.max(0, 1 - predTps), color: "rgba(255,255,255,0.1)" },
   ];
-  if (stats.total === 0) {
-    segments[2] = { value: 1, color: "rgba(255,255,255,0.05)" };
-  }
 
   const positiveRatioPct = (stats.positiveRatio * 100).toFixed(1);
   const negativeRatioPct = stats.total
@@ -245,12 +240,10 @@ function PatchCellStatsInline({ patchId }: { patchId: string }) {
         {donutSize > 0 ? (
           <Donut
             size={donutSize}
-            segments={segments}
-            centerLabel="Model TPS"
+            segments={donutSegments}
+            centerLabel="Pred TPS"
             centerSubLabel={
-              patch
-                ? `${(patch.patchPredTps * 100).toFixed(1)}%`
-                : "—"
+              patch ? `${(predTps * 100).toFixed(2)}%` : "—"
             }
           />
         ) : null}
@@ -268,18 +261,6 @@ function PatchCellStatsInline({ patchId }: { patchId: string }) {
           label="Negative"
           value={stats.negative}
           hint={`(${negativeRatioPct}%)`}
-        />
-        <StatLine
-          label="Model TPS"
-          value={
-            patch ? (
-              <span className="text-red-300">
-                {(patch.patchPredTps * 100).toFixed(1)}%
-              </span>
-            ) : (
-              "—"
-            )
-          }
         />
       </div>
     </div>
