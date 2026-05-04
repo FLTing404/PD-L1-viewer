@@ -1,0 +1,10 @@
+{
+  "patch_id": "DI2025-030614_2025-04-21_14_59_40_x34816_y11776",
+  "source_image_path": "/nfs-medical3/data/浙二黄封博_乳腺癌/乳腺癌PDL1/tiling_level0_512/DI2025-030614_2025-04-21_14_59_40/DI2025-030614_2025-04-21_14_59_40_x34816_y11776.jpg",
+  "source_distill_npz_path": "/nfs-medical3/data/浙二黄封博_乳腺癌/乳腺癌PDL1/distill_feature_stem/DI2025-030614_2025-04-21_14_59_40/DI2025-030614_2025-04-21_14_59_40_x34816_y11776.npz",
+  "num_cells": 169,
+  "patch_pred_bucket": "TPS_10",
+  "patch_pred_tps": 0.2758108377456665,
+  "cell_threshold_used": 0.5,
+  "cell_results_file": "cells.csv"
+}

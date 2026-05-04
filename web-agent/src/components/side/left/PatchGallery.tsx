@@ -1,0 +1,329 @@
+"use client";
+
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  GALLERY_PAGE_SIZE,
+  GALLERY_PAGE_SIZE_SIDEBAR,
+  computeWsiStats,
+  useViewerStore,
+  type GallerySort,
+} from "@/lib/store";
+import { BUCKET_ORDER, BUCKET_STYLES } from "@/lib/bucket";
+import type { PatchEntry } from "@/types/case";
+import { cn } from "@/lib/utils";
+
+export type PatchGalleryVariant = "grid" | "sidebar";
+
+function patchFileLabel(p: PatchEntry): string {
+  const rel = p.imageFile.replace(/\\/g, "/");
+  const parts = rel.split("/").filter(Boolean);
+  if (parts.length >= 2) return parts[parts.length - 2] ?? p.patchId;
+  return p.patchId;
+}
+
+export function PatchGallery({
+  variant = "grid",
+}: {
+  variant?: PatchGalleryVariant;
+}) {
+  const manifest = useViewerStore((s) => s.manifest);
+  const caseId = useViewerStore((s) => s.caseId);
+  const selectedPatchId = useViewerStore((s) => s.selectedPatchId);
+  const galleryBucket = useViewerStore((s) => s.galleryBucket);
+  const gallerySort = useViewerStore((s) => s.gallerySort);
+  const galleryPage = useViewerStore((s) => s.galleryPage);
+  const setGalleryBucket = useViewerStore((s) => s.setGalleryBucket);
+  const setGallerySort = useViewerStore((s) => s.setGallerySort);
+  const setGalleryPage = useViewerStore((s) => s.setGalleryPage);
+  const setSelectedPatch = useViewerStore((s) => s.setSelectedPatch);
+  const flyToPatch = useViewerStore((s) => s.flyToPatch);
+
+  const pageSize =
+    variant === "sidebar" ? GALLERY_PAGE_SIZE_SIDEBAR : GALLERY_PAGE_SIZE;
+
+  const stats = computeWsiStats(manifest);
+
+  const filtered: PatchEntry[] = (manifest?.patches ?? []).filter(
+    (p) => p.patchPredBucket === galleryBucket,
+  );
+  const sorted = [...filtered].sort((a, b) =>
+    gallerySort === "desc"
+      ? b.patchPredTps - a.patchPredTps
+      : a.patchPredTps - b.patchPredTps,
+  );
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const page = Math.min(galleryPage, totalPages - 1);
+  const startIdx = page * pageSize;
+  const pageItems = sorted.slice(startIdx, startIdx + pageSize);
+
+  const handlePatchClick = (patchId: string) => {
+    void setSelectedPatch(patchId);
+    flyToPatch(patchId);
+  };
+
+  const titleClass =
+    "text-app-section font-semibold tracking-wide";
+
+  return (
+    <Card
+      className={cn(
+        "flex min-h-0 flex-col gap-2 py-3",
+        variant === "sidebar" && "h-full py-2 shadow-sm",
+      )}
+    >
+      <CardContent
+        className={cn(
+          "flex min-h-0 flex-col gap-2.5 px-3",
+          variant === "sidebar" && "h-full gap-2 px-2.5 py-0",
+        )}
+      >
+        <div
+          className={cn(
+            "flex items-center justify-between gap-2",
+            variant === "sidebar" && "flex-col items-stretch",
+          )}
+        >
+          <span className={titleClass}>
+            Patch Gallery{" "}
+            {variant === "grid" ? (
+              <span className="font-normal text-muted-foreground">
+                (Sorted by TPS Score)
+              </span>
+            ) : null}
+          </span>
+          <div className="text-app-body flex items-center gap-2 text-muted-foreground">
+            <span className="shrink-0">Sort</span>
+            <Select
+              value={gallerySort}
+              onValueChange={(v) => v && setGallerySort(v as GallerySort)}
+            >
+              <SelectTrigger
+                className={cn(
+                  "text-app-body h-auto min-h-10 py-2",
+                  variant === "sidebar" ? "w-full" : "w-[130px]",
+                )}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="desc">High to Low</SelectItem>
+                <SelectItem value="asc">Low to High</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            "flex flex-wrap gap-1",
+            variant === "sidebar" && "gap-1",
+          )}
+        >
+          {BUCKET_ORDER.map((b) => {
+            const style = BUCKET_STYLES[b];
+            const count = stats.bucketCounts[b] ?? 0;
+            const isActive = galleryBucket === b;
+            return (
+              <button
+                key={b}
+                type="button"
+                onClick={() => setGalleryBucket(b)}
+                className={cn(
+                  "text-app-body rounded-md px-2 py-1 font-medium ring-1 transition-colors",
+                  variant === "sidebar" && "min-w-0 flex-1 px-1.5",
+                  isActive
+                    ? cn(style.badgeBg, style.badgeText, style.badgeRing)
+                    : "bg-muted/40 text-muted-foreground ring-border hover:bg-muted/70",
+                )}
+              >
+                <span className="truncate">
+                  {style.label} ({count})
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {sorted.length === 0 ? (
+          <div className="text-app-body flex min-h-[120px] flex-1 items-center justify-center rounded-md border border-dashed text-muted-foreground">
+            No patches in this bucket.
+          </div>
+        ) : variant === "sidebar" ? (
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overflow-x-hidden pr-0.5">
+            {pageItems.map((p) => {
+              const isActive = p.patchId === selectedPatchId;
+              const tpsPct = (p.patchPredTps * 100).toFixed(1);
+              const thumbUrl = caseId
+                ? `/api/cases/${encodeURIComponent(caseId)}/file/patches/${encodeURIComponent(
+                    p.patchId,
+                  )}/image.jpg`
+                : "";
+              const bucketStyle = BUCKET_STYLES[p.patchPredBucket];
+              const fname = patchFileLabel(p);
+              return (
+                <button
+                  key={p.patchId}
+                  type="button"
+                  onClick={() => handlePatchClick(p.patchId)}
+                  className={cn(
+                    "flex w-full gap-2 rounded-md border p-1.5 text-left transition-colors",
+                    isActive
+                      ? "border-red-500 bg-red-500/10 ring-1 ring-red-500"
+                      : "border-border bg-muted/20 hover:bg-muted/45",
+                  )}
+                  title={p.patchId}
+                >
+                  <div className="size-10 shrink-0 overflow-hidden rounded bg-muted">
+                    {thumbUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={thumbUrl}
+                        alt=""
+                        className="size-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : null}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className={cn(
+                        "truncate font-mono text-app-body leading-tight",
+                        isActive ? "text-red-200" : "text-foreground",
+                      )}
+                      title={fname}
+                    >
+                      {fname}
+                    </div>
+                    <div className="text-app-body mt-0.5 text-muted-foreground">
+                      TPS{" "}
+                      <span
+                        className={cn(
+                          "font-mono font-semibold tabular-nums",
+                          isActive ? "text-red-300" : bucketStyle.text,
+                        )}
+                      >
+                        {tpsPct}%
+                      </span>
+                      <span className="mx-1 text-border">·</span>
+                      Cells{" "}
+                      <span className="font-mono tabular-nums text-foreground">
+                        {p.numCells}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10">
+              {pageItems.map((p) => {
+                const isActive = p.patchId === selectedPatchId;
+                const tpsPct = (p.patchPredTps * 100).toFixed(1);
+                const thumbUrl = caseId
+                  ? `/api/cases/${encodeURIComponent(caseId)}/file/patches/${encodeURIComponent(
+                      p.patchId,
+                    )}/image.jpg`
+                  : "";
+                const bucketStyle = BUCKET_STYLES[p.patchPredBucket];
+                return (
+                  <button
+                    key={p.patchId}
+                    type="button"
+                    onClick={() => handlePatchClick(p.patchId)}
+                    className={cn(
+                      "group flex flex-col overflow-hidden rounded-md ring-1 transition-all",
+                      isActive
+                        ? "ring-2 ring-red-500"
+                        : cn("ring-border hover:ring-2", bucketStyle.ring),
+                    )}
+                    title={p.patchId}
+                  >
+                    <div className="aspect-square w-full overflow-hidden bg-muted">
+                      {thumbUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={thumbUrl}
+                          alt={p.patchId}
+                          className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                          loading="lazy"
+                        />
+                      ) : null}
+                    </div>
+                    <span
+                      className={cn(
+                        "text-app-body py-0.5 text-center font-mono font-semibold tabular-nums",
+                        isActive ? "text-red-300" : bucketStyle.text,
+                      )}
+                    >
+                      {tpsPct}%
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {totalPages > 1 ? (
+          <div
+            className={cn(
+              "flex items-center justify-center gap-1 pt-1",
+              variant === "sidebar" && "flex-wrap",
+            )}
+          >
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              disabled={page === 0}
+              onClick={() => setGalleryPage(page - 1)}
+            >
+              <ChevronLeft className="size-3.5" />
+            </Button>
+            {variant === "sidebar" && totalPages > 6 ? (
+              <span className="text-app-body px-1 text-muted-foreground">
+                {page + 1} / {totalPages}
+              </span>
+            ) : (
+              Array.from({ length: totalPages }).map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setGalleryPage(i)}
+                  className={cn(
+                    "text-app-body h-9 min-w-9 rounded-md px-2 font-medium transition-colors",
+                    i === page
+                      ? "bg-primary/20 text-primary ring-1 ring-primary/40"
+                      : "text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {i + 1}
+                </button>
+              ))
+            )}
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              disabled={page === totalPages - 1}
+              onClick={() => setGalleryPage(page + 1)}
+            >
+              <ChevronRight className="size-3.5" />
+            </Button>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
