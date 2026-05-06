@@ -1,13 +1,29 @@
 "use client";
 
-import { SelectedPatchStackedView } from "./SelectedPatchStackedView";
+import { useRef } from "react";
+import {
+  SelectedPatchDetailCard,
+  SelectedPatchPreviewBand,
+} from "./SelectedPatchStackedView";
 
-/** 与主页三栏 2:6:2 中的右侧一份 */
+/**
+ * Right column (2 of 2:6:2): mirrors LeftColumn — top band aligns with WSI+heatmap
+ * row; bottom band aligns with TPS distribution + local summary strip.
+ */
 export function RightColumn() {
+  const previewShellRef = useRef<HTMLDivElement>(null);
+
   return (
-    <aside className="flex h-full min-h-0 min-w-0 flex-[2_1_0%] flex-col border-l border-border bg-background/60">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 py-3">
-        <SelectedPatchStackedView />
+    <aside className="flex h-full min-h-0 min-w-0 flex-[2_1_0%] flex-col gap-3 overflow-hidden border-l border-border bg-background/60 p-3">
+      <div
+        ref={previewShellRef}
+        className="relative flex min-h-0 min-w-0 flex-[5_1_0%] flex-col overflow-hidden rounded-xl ring-1 ring-foreground/10"
+      >
+        <SelectedPatchPreviewBand alignRootRef={previewShellRef} />
+      </div>
+
+      <div className="flex min-h-0 min-w-0 flex-[2_1_0%] flex-col gap-2 overflow-y-auto">
+        <SelectedPatchDetailCard />
       </div>
     </aside>
   );

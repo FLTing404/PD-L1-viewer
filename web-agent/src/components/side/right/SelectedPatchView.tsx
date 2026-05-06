@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
@@ -8,6 +8,7 @@ import {
   selectSelectedPatch,
   type PanelLayer,
 } from "@/lib/store";
+import { formatPatchOriginXY } from "@/lib/patchDisplay";
 import { cn } from "@/lib/utils";
 
 interface LayerOption {
@@ -136,6 +137,11 @@ export function SelectedPatchView() {
             <span className="font-mono text-[12px] text-muted-foreground">
               Patch ID: {patch?.patchId ?? "—"}
             </span>
+            {patch ? (
+              <span className="font-mono text-[12px] text-muted-foreground">
+                WSI origin: {formatPatchOriginXY(patch)}
+              </span>
+            ) : null}
           </div>
           {patch ? (
             <button

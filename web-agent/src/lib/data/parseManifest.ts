@@ -6,12 +6,18 @@ import type {
   WsiSummary,
   PatchBucket,
 } from "@/types/case";
+import type { TileSourceConfig } from "@/types/tileSource";
 import {
   DEFAULT_PATCH_SIZE,
   deriveWsiExtent,
   parsePatchId,
 } from "./patchGeometry";
-import { buildTileSource, readImageSize } from "./tileSource";
+import {
+  buildDziTileSource,
+  buildTileSource,
+  readDziXmlMeta,
+  readImageSize,
+} from "./tileSource";
 
 interface RawWsiSummary {
   wsi_id: string;
@@ -99,6 +105,35 @@ function snakeToWsiSummary(raw: RawWsiSummary): WsiSummary {
   };
 }
 
+async function fileExists(absPath: string): Promise<boolean> {
+  try {
+    await fs.access(absPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Prefer Deep Zoom tiles when present (generated offline with libvips `dzsave`). */
+const DZI_CANDIDATES = ["dzi/stitched.dzi", "dzi/slide.dzi"] as const;
+
+async function tryResolveDziTileSource(
+  caseId: string,
+  caseDir: string,
+): Promise<Extract<TileSourceConfig, { kind: "dzi" }> | null> {
+  for (const rel of DZI_CANDIDATES) {
+    const abs = path.join(caseDir, rel);
+    if (!(await fileExists(abs))) continue;
+    const meta = await readDziXmlMeta(abs);
+    if (!meta) continue;
+    return buildDziTileSource(caseId, rel, meta);
+  }
+  return null;
+}
+
+/** Prefer full-resolution stitch next to thumbnail.png (see code/data/case1/stitched.jpg). */
+const STITCHED_FILENAME = "stitched.jpg";
+
 export async function loadCaseManifest(
   caseId: string,
   caseDir: string,
@@ -136,21 +171,47 @@ export async function loadCaseManifest(
     })
     .filter((entry): entry is PatchEntry => entry !== null);
 
-  const thumbnailPath = path.join(caseDir, wsiSummary.thumbnailFile);
-  const thumbnailSize = await readImageSize(thumbnailPath);
-
   let wsiWidth = summary.wsi_width ?? 0;
   let wsiHeight = summary.wsi_height ?? 0;
-  if (!wsiWidth || !wsiHeight) {
-    const extent = deriveWsiExtent(patches);
-    wsiWidth = extent.wsiWidth;
-    wsiHeight = extent.wsiHeight;
+
+  let tileSource: TileSourceConfig;
+  let viewerSize = { width: 0, height: 0 };
+
+  const dziSource = await tryResolveDziTileSource(caseId, caseDir);
+  if (dziSource) {
+    tileSource = dziSource;
+    viewerSize = { width: dziSource.width, height: dziSource.height };
+    wsiWidth = dziSource.width;
+    wsiHeight = dziSource.height;
+  } else {
+    const stitchedPath = path.join(caseDir, STITCHED_FILENAME);
+    const thumbPath = path.join(caseDir, wsiSummary.thumbnailFile);
+    const useStitched = await fileExists(stitchedPath);
+
+    const viewerDiskPath = useStitched ? stitchedPath : thumbPath;
+    const viewerRelPath = useStitched ? STITCHED_FILENAME : wsiSummary.thumbnailFile;
+
+    viewerSize = await readImageSize(viewerDiskPath);
+
+    if (useStitched && viewerSize.width > 0 && viewerSize.height > 0) {
+      wsiWidth = viewerSize.width;
+      wsiHeight = viewerSize.height;
+    } else if (!wsiWidth || !wsiHeight) {
+      const extent = deriveWsiExtent(patches);
+      wsiWidth = extent.wsiWidth;
+      wsiHeight = extent.wsiHeight;
+    }
+
+    if (!viewerSize.width || !viewerSize.height) {
+      viewerSize = {
+        width: Math.max(1, wsiWidth),
+        height: Math.max(1, wsiHeight),
+      };
+    }
+
+    tileSource = buildTileSource(caseId, viewerRelPath, viewerSize);
   }
 
-  const tileSource = buildTileSource(caseId, wsiSummary, {
-    width: thumbnailSize.width,
-    height: thumbnailSize.height,
-  });
 
   const manifest: CaseManifest = {
     caseId,
@@ -159,10 +220,10 @@ export async function loadCaseManifest(
     wsiMeta: {
       wsiWidth,
       wsiHeight,
-      thumbnailWidth: thumbnailSize.width,
-      thumbnailHeight: thumbnailSize.height,
-      thumbScaleX: thumbnailSize.width / wsiWidth,
-      thumbScaleY: thumbnailSize.height / wsiHeight,
+      thumbnailWidth: viewerSize.width,
+      thumbnailHeight: viewerSize.height,
+      thumbScaleX: viewerSize.width / wsiWidth,
+      thumbScaleY: viewerSize.height / wsiHeight,
       patchSize: DEFAULT_PATCH_SIZE,
     },
     tileSource,

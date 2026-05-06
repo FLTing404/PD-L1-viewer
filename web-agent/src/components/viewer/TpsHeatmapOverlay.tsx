@@ -5,7 +5,7 @@ import { useOsdViewer } from "./ViewerContext";
 import { useViewerStore } from "@/lib/store";
 import { buildKdeTpsHeatmapCanvas } from "@/lib/kdeTpsHeatmap";
 
-/** 右侧：整幅 WSI 上叠加连续 KDE 热力（非 patch 色块） */
+/** Right pane: full WSI with continuous KDE heatmap tint (not patch blocks). */
 export function TpsHeatmapOverlay() {
   const { heatmapViewer } = useOsdViewer();
   const manifest = useViewerStore((s) => s.manifest);

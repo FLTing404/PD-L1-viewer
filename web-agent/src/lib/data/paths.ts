@@ -10,8 +10,19 @@ export function getCasesRoot(): string {
   return path.resolve(process.cwd(), "..", "data");
 }
 
+/**
+ * Optional demo aliases: list multiple case IDs in the UI while reusing one
+ * on-disk folder (no duplicated `data/<caseId>` trees).
+ */
+const CASE_DATA_ALIASES: Record<string, string> = {
+  case2: "case1",
+  case3: "case1",
+};
+
+/** Physical folder under {@link getCasesRoot} that holds images / CSV for this case. */
 export function getCaseDir(caseId: string): string {
-  return path.join(getCasesRoot(), caseId);
+  const source = CASE_DATA_ALIASES[caseId] ?? caseId;
+  return path.join(getCasesRoot(), source);
 }
 
 const CASE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;

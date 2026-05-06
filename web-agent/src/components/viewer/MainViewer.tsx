@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
 import type OpenSeadragonNS from "openseadragon";
 import { ViewerContext } from "./ViewerContext";
 import { PatchOverlay } from "./PatchOverlay";
+import { LocalRoiSelector, LocalRoiToolbar } from "./LocalRoiSelector";
 import { TpsHeatmapOverlay } from "./TpsHeatmapOverlay";
 import { useViewerStore } from "@/lib/store";
 import { toOsdTileSource } from "./osdTileSource";
@@ -36,7 +38,12 @@ const OSD_OPTIONS_BASE: Partial<OpenSeadragonNS.Options> = {
   },
 };
 
-export function MainViewer() {
+export function MainViewer({
+  heatmapPaneRef,
+}: {
+  /** Optional: shared ref to the heatmap pane for Selected Patch vertical alignment. */
+  heatmapPaneRef?: RefObject<HTMLDivElement | null>;
+} = {}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const leftRef = useRef<HTMLDivElement | null>(null);
   const rightRef = useRef<HTMLDivElement | null>(null);
@@ -53,6 +60,8 @@ export function MainViewer() {
   );
 
   const ignoreViewportSyncRef = useRef<"left" | "right" | null>(null);
+  /** Set when OSD loads (dynamic import); avoids static `openseadragon` import on the server. */
+  const osdLibRef = useRef<typeof OpenSeadragonNS | null>(null);
 
   const manifest = useViewerStore((s) => s.manifest);
   const manifestStatus = useViewerStore((s) => s.manifestStatus);
@@ -66,6 +75,8 @@ export function MainViewer() {
     (async () => {
       const OpenSeadragon = (await import("openseadragon")).default;
       if (cancelled || !leftRef.current || !rightRef.current) return;
+
+      osdLibRef.current = OpenSeadragon;
 
       vLeft = OpenSeadragon({
         element: leftRef.current,
@@ -114,7 +125,7 @@ export function MainViewer() {
 
       vLeft.addHandler("viewport-change", onLeftViewportChange);
       vRight.addHandler("viewport-change", onRightViewportChange);
-      /* 与 spring 动画帧同步，减少一侧动画、另一侧仍落后的体感延迟 */
+      /* Keep both panes in sync with spring animation frames */
       vLeft.addHandler("animation", onLeftViewportChange);
       vRight.addHandler("animation", onRightViewportChange);
 
@@ -137,6 +148,7 @@ export function MainViewer() {
       }
       leftViewerRef.current = null;
       rightViewerRef.current = null;
+      osdLibRef.current = null;
       setLeftViewer(null);
       setRightViewer(null);
     };
@@ -148,12 +160,23 @@ export function MainViewer() {
     if (!viewersReady || !tileSource) return;
     const ts = toOsdTileSource(tileSource);
     try {
-      leftViewer.open({ tileSource: ts });
-      rightViewer.open({ tileSource: ts });
+      /* Pass the tile source directly (not `{ tileSource }`). OSD typings omit some valid specifiers. */
+      leftViewer.open(ts as never);
+      rightViewer.open(ts as never);
       requestAnimationFrame(() => {
         try {
-          leftViewer.viewport.resize();
-          rightViewer.viewport.resize();
+          const OSD = osdLibRef.current;
+          if (!OSD) return;
+          const lw = leftRef.current?.clientWidth ?? 0;
+          const lh = leftRef.current?.clientHeight ?? 0;
+          const rw = rightRef.current?.clientWidth ?? 0;
+          const rh = rightRef.current?.clientHeight ?? 0;
+          if (lw > 0 && lh > 0) {
+            leftViewer.viewport.resize(new OSD.Point(lw, lh), false);
+          }
+          if (rw > 0 && rh > 0) {
+            rightViewer.viewport.resize(new OSD.Point(rw, rh), false);
+          }
         } catch {
           /* ignore */
         }
@@ -168,8 +191,18 @@ export function MainViewer() {
     const el = containerRef.current;
     const syncSize = () => {
       try {
-        leftViewer.viewport.resize();
-        rightViewer.viewport.resize();
+        const OSD = osdLibRef.current;
+        if (!OSD) return;
+        const lw = leftRef.current?.clientWidth ?? 0;
+        const lh = leftRef.current?.clientHeight ?? 0;
+        const rw = rightRef.current?.clientWidth ?? 0;
+        const rh = rightRef.current?.clientHeight ?? 0;
+        if (lw > 0 && lh > 0) {
+          leftViewer.viewport.resize(new OSD.Point(lw, lh), false);
+        }
+        if (rw > 0 && rh > 0) {
+          rightViewer.viewport.resize(new OSD.Point(rw, rh), false);
+        }
       } catch {
         /* ignore */
       }
@@ -186,6 +219,7 @@ export function MainViewer() {
     const handler = (event: OpenSeadragonNS.CanvasClickEvent) => {
       if (!event.quick) return;
       const state = useViewerStore.getState();
+      if (state.localRoiDrawMode) return;
       const m = state.manifest;
       if (!m) return;
       const imagePt = viewer.viewport.viewerElementToImageCoordinates(
@@ -271,8 +305,11 @@ export function MainViewer() {
         className="relative flex min-h-0 min-w-0 w-full flex-1 gap-2 overflow-hidden bg-zinc-950"
       >
         <div className="relative min-h-0 min-w-0 flex-1 basis-0 overflow-hidden">
-          <div className="absolute left-2 top-2 z-10 rounded bg-black/55 px-2 py-0.5 text-[12px] font-medium text-white/90 backdrop-blur-sm">
-            WSI
+          <div className="absolute left-2 top-2 z-10 flex items-center gap-2">
+            <span className="rounded bg-black/55 px-2 py-0.5 text-[12px] font-medium text-white/90 backdrop-blur-sm">
+              WSI
+            </span>
+            <LocalRoiToolbar />
           </div>
           <div ref={leftRef} className="absolute inset-0" />
           <div
@@ -281,9 +318,13 @@ export function MainViewer() {
             className="pointer-events-auto absolute bottom-3 left-3 z-10 h-[130px] w-[200px] overflow-hidden rounded-md border border-white/15 bg-black/60 shadow-lg backdrop-blur-sm"
           />
           <PatchOverlay />
+          <LocalRoiSelector />
         </div>
 
-        <div className="relative min-h-0 min-w-0 flex-1 basis-0 overflow-hidden">
+        <div
+          ref={heatmapPaneRef}
+          className="relative min-h-0 min-w-0 flex-1 basis-0 overflow-hidden"
+        >
           <div className="absolute left-2 top-2 z-10 rounded bg-black/55 px-2 py-0.5 text-[12px] font-medium text-white/90 backdrop-blur-sm">
             TPS spatial heatmap
           </div>

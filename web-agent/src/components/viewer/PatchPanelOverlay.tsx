@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Eye, EyeOff, RotateCcw } from "lucide-react";
@@ -9,6 +9,7 @@ import {
   PREVIEW_TILE_MAX,
   type PanelLayer,
 } from "@/lib/store";
+import { formatPatchOriginXY } from "@/lib/patchDisplay";
 import { cn } from "@/lib/utils";
 
 interface PanelImageInfo {
@@ -148,7 +149,7 @@ export function PatchPanelOverlay() {
         <span className="font-semibold text-white/90">Patch views</span>
         <div className="flex items-center gap-2 text-white/60">
           <span className="font-mono">
-            {patch ? `x${patch.px} / y${patch.py}` : "no patch"}
+            {patch ? formatPatchOriginXY(patch) : "no patch"}
           </span>
           {patch ? (
             <span className="font-mono tabular-nums">

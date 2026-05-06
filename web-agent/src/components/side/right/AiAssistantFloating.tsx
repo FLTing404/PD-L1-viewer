@@ -183,7 +183,11 @@ export function AiAssistantFloating() {
     <div className="pointer-events-none fixed inset-0 z-[100]">
       <button
         type="button"
-        title={open ? "拖动移动 · 点击关闭助手" : "拖动移动 · 点击打开 AI 助手"}
+        title={
+          open
+            ? "Drag to move · Click to close assistant"
+            : "Drag to move · Click to open AI assistant"
+        }
         className={cn(
           "pointer-events-auto absolute flex items-center justify-center rounded-full border border-white/20 bg-primary text-primary-foreground shadow-lg shadow-black/40 transition-[box-shadow,transform] hover:scale-105 hover:shadow-xl active:scale-95",
           open && "ring-2 ring-primary/40 ring-offset-2 ring-offset-background",
@@ -203,7 +207,7 @@ export function AiAssistantFloating() {
       {open ? (
         <div
           role="dialog"
-          aria-label="AI 助手"
+          aria-label="AI assistant"
           className="pointer-events-auto absolute flex max-h-[min(70vh,560px)] w-[384px] flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xl"
           style={{ left: panelPos.x, top: panelPos.y, height: PANEL_H }}
         >
@@ -217,7 +221,7 @@ export function AiAssistantFloating() {
             </span>
             <button
               type="button"
-              title="关闭"
+              title="Close"
               className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               onClick={() => setOpen(false)}
             >

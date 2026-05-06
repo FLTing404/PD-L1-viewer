@@ -1,5 +1,6 @@
 "use client";
 
+import type { RefObject } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,7 +11,9 @@ import {
   selectSelectedPatch,
   type PanelLayer,
 } from "@/lib/store";
+import { formatPatchOriginXY } from "@/lib/patchDisplay";
 import { cn } from "@/lib/utils";
+import { useHeatmapPaneRef } from "@/components/viewer/HeatmapAlignContext";
 
 interface ZoomState {
   zoom: number;
@@ -24,7 +27,7 @@ const IDENTITY: ZoomState = { zoom: 1, panX: 0, panY: 0 };
 
 const POSITIVE_COLOR = "#b85a5a";
 const NEGATIVE_COLOR = "#5e7ea8";
-/** patch.json `patch_pred_tps`（0–1）在圆环上的填充色 */
+/** Ring color for patch.json patch_pred_tps (0–1). */
 const PRED_TPS_RING_COLOR = "#e0786e";
 const OSD_CORNER_LABEL =
   "pointer-events-none absolute left-2 top-2 z-10 rounded bg-black/55 px-2 py-0.5 text-[12px] font-medium text-white/90 backdrop-blur-sm";
@@ -47,7 +50,7 @@ interface DonutSegment {
   color: string;
 }
 
-/** 圆环占位与最大边长（约比原 118px 大 20%） */
+/** Donut box size / max side (~20% larger than former 118px). */
 const DONUT_BOX_PX = 142;
 
 function Donut({
@@ -67,7 +70,7 @@ function Donut({
   const cy = size / 2;
   const C = 2 * Math.PI * r;
   const total = segments.reduce((acc, s) => acc + s.value, 0) || 1;
-  /* 上行文案 / 下行数值：默认上行略上移、下行略下移（如 Model TPS + 64.7%） */
+  /* Top label / bottom value vertical offsets (e.g. Pred TPS + 21.06%) */
   const mainOffsetY = -Math.round(size * 0.055);
   const subLabelOffsetY = Math.round(size * 0.125);
   const fontPx = "0.75rem";
@@ -170,7 +173,7 @@ function StatLine({
   );
 }
 
-/** cell 级统计（原 TPS Score 卡片）：无单独标题，与 AI Assistant 同为 text-xs */
+/** Inline cell stats for selected patch (text-xs, no separate card title). */
 function PatchCellStatsInline({ patchId }: { patchId: string }) {
   const cells = useViewerStore((s) => s.cells);
   const cellsStatus = useViewerStore((s) => s.cellsStatus);
@@ -208,7 +211,7 @@ function PatchCellStatsInline({ patchId }: { patchId: string }) {
 
   if (cellsStatus === "loading") {
     return (
-      <div className="flex shrink-0 items-center gap-3 border-b border-border/40 pb-2">
+      <div className="flex shrink-0 items-center gap-3 border-t border-border/40 pt-2">
         <Skeleton
           className="shrink-0 rounded-full"
           style={{ width: DONUT_BOX_PX, height: DONUT_BOX_PX }}
@@ -224,14 +227,14 @@ function PatchCellStatsInline({ patchId }: { patchId: string }) {
 
   if (cellsStatus === "error") {
     return (
-      <p className="shrink-0 border-b border-border/40 pb-2 text-xs text-destructive">
+      <p className="shrink-0 border-t border-border/40 pt-2 text-xs text-destructive">
         Failed to load cell-level results.
       </p>
     );
   }
 
   return (
-    <div className="flex min-w-0 shrink-0 flex-row items-center gap-3 border-b border-border/40 pb-2">
+    <div className="flex min-w-0 shrink-0 flex-row items-center gap-3 border-t border-border/40 pt-2">
       <div
         ref={donutBoxRef}
         className="flex shrink-0 items-center justify-center"
@@ -382,18 +385,53 @@ function PatchLayerZoomPreviewFixed({
   );
 }
 
-export function SelectedPatchStackedView() {
+/** Top row of right column: Cell Class + Heatmap; vertically aligned to TPS spatial heatmap pane. */
+export function SelectedPatchPreviewBand({
+  alignRootRef,
+}: {
+  alignRootRef: RefObject<HTMLDivElement | null>;
+}) {
   const caseId = useViewerStore((s) => s.caseId);
   const patch = useViewerStore(selectSelectedPatch);
-  const setSelectedPatch = useViewerStore((s) => s.setSelectedPatch);
+  const heatmapPaneRef = useHeatmapPaneRef();
   const stackRef = useRef<HTMLDivElement>(null);
   const [squareSide, setSquareSide] = useState(0);
+  const [alignBand, setAlignBand] = useState({ top: 0, height: 0 });
   const [patchViewTransform, setPatchViewTransform] =
     useState<ZoomState>(IDENTITY);
 
   useEffect(() => {
     setPatchViewTransform(IDENTITY);
   }, [caseId, patch?.patchId]);
+
+  useLayoutEffect(() => {
+    const hp = heatmapPaneRef?.current;
+    const root = alignRootRef.current;
+    if (!patch || !caseId || !hp || !root) {
+      setAlignBand({ top: 0, height: 0 });
+      return;
+    }
+    const update = () => {
+      const hr = hp.getBoundingClientRect();
+      const rr = root.getBoundingClientRect();
+      setAlignBand({
+        top: Math.max(0, Math.round(hr.top - rr.top)),
+        height: Math.max(0, Math.round(hr.height)),
+      });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(hp);
+    ro.observe(root);
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [heatmapPaneRef, alignRootRef, patch, caseId]);
+
+  const alignActive =
+    Boolean(heatmapPaneRef) && alignBand.height >= 48 && patch && caseId;
 
   useLayoutEffect(() => {
     const el = stackRef.current;
@@ -419,61 +457,106 @@ export function SelectedPatchStackedView() {
     const ro = new ResizeObserver(() => measure());
     ro.observe(el);
     return () => ro.disconnect();
-  }, [caseId, patch?.patchId]);
+  }, [caseId, patch?.patchId, alignBand.height, alignActive]);
+
+  const previewRows = patch && caseId && (
+    <>
+      <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden">
+        <PatchLayerZoomPreviewFixed
+          caseId={caseId}
+          patchId={patch.patchId}
+          layer="cell_class"
+          label="Cell Class"
+          squareSide={squareSide}
+          transform={patchViewTransform}
+          setTransform={setPatchViewTransform}
+        />
+      </div>
+      <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden">
+        <PatchLayerZoomPreviewFixed
+          caseId={caseId}
+          patchId={patch.patchId}
+          layer="heatmap_overlay"
+          label="Heatmap"
+          squareSide={squareSide}
+          transform={patchViewTransform}
+          setTransform={setPatchViewTransform}
+        />
+      </div>
+    </>
+  );
 
   return (
-    <Card className="flex h-full min-h-0 flex-1 flex-col gap-0 overflow-hidden py-2">
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden px-6 pb-2 pt-0">
-        <div className="flex shrink-0 items-center justify-between gap-2 py-0.5">
-          <span className="text-xs font-semibold tracking-wide">
-            Selected Patch
-          </span>
-          {patch ? (
-            <button
-              type="button"
-              onClick={() => void setSelectedPatch(null)}
-              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              title="Clear selection"
-            >
-              <X className="size-4" />
-            </button>
-          ) : null}
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-zinc-950/30">
+      {!caseId || !patch ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center px-3 text-center text-xs text-muted-foreground">
+          Select a patch from the gallery or click on the WSI.
         </div>
+      ) : (
+        <>
+          {alignActive ? (
+            <>
+              <div
+                style={{ height: alignBand.top }}
+                className="w-full shrink-0"
+                aria-hidden
+              />
+              <div
+                ref={stackRef}
+                style={{ height: alignBand.height }}
+                className="flex w-full min-w-0 shrink-0 flex-col gap-2 overflow-hidden px-1"
+              >
+                {previewRows}
+              </div>
+            </>
+          ) : (
+            <div
+              ref={stackRef}
+              className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden px-1 py-1"
+            >
+              {previewRows}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
+/** Bottom row: Selected Patch title + metrics (matches TPS distribution + local summary band). */
+export function SelectedPatchDetailCard() {
+  const caseId = useViewerStore((s) => s.caseId);
+  const patch = useViewerStore(selectSelectedPatch);
+  const setSelectedPatch = useViewerStore((s) => s.setSelectedPatch);
+
+  return (
+    <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-2">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden px-4 pb-2 pt-0 sm:px-6">
         {!caseId || !patch ? (
-          <div className="flex min-h-0 flex-1 items-center justify-center rounded-md border border-dashed px-4 text-center text-xs text-muted-foreground">
-            从画廊选择或在左侧 WSI 上点击 patch。
+          <div className="flex min-h-[120px] flex-1 items-center justify-center rounded-md border border-dashed px-4 text-center text-xs text-muted-foreground">
+            Selection details appear here after you choose a patch.
           </div>
         ) : (
           <>
-            <PatchCellStatsInline patchId={patch.patchId} />
-            <div
-              ref={stackRef}
-              className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden"
-            >
-              <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden">
-                <PatchLayerZoomPreviewFixed
-                  caseId={caseId}
-                  patchId={patch.patchId}
-                  layer="cell_class"
-                  label="Cell Class"
-                  squareSide={squareSide}
-                  transform={patchViewTransform}
-                  setTransform={setPatchViewTransform}
-                />
+            <div className="flex shrink-0 items-center justify-between gap-2">
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-xs font-semibold tracking-wide">
+                  Selected Patch
+                </span>
+                <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                  {formatPatchOriginXY(patch)}
+                </span>
               </div>
-              <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden">
-                <PatchLayerZoomPreviewFixed
-                  caseId={caseId}
-                  patchId={patch.patchId}
-                  layer="heatmap_overlay"
-                  label="Heatmap"
-                  squareSide={squareSide}
-                  transform={patchViewTransform}
-                  setTransform={setPatchViewTransform}
-                />
-              </div>
+              <button
+                type="button"
+                onClick={() => void setSelectedPatch(null)}
+                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                title="Clear selection"
+              >
+                <X className="size-4" />
+              </button>
             </div>
+            <PatchCellStatsInline patchId={patch.patchId} />
           </>
         )}
       </CardContent>

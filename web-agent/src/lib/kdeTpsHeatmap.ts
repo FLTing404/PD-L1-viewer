@@ -1,5 +1,8 @@
 import type { CaseManifest } from "@/types/case";
 
+/** Avoid allocating canvas at full WSI pixels (e.g. 51k×26k); browsers reject / blank huge canvases. */
+const MAX_HEATMAP_EDGE_PX = 4096;
+
 function coolWarmRgba(t: number): [number, number, number, number] {
   const x = Math.max(0, Math.min(1, t));
   const r = Math.round(40 + x * 215);
@@ -57,8 +60,8 @@ function boxBlur2D(
 }
 
 /**
- * Patch 中心为高斯核、TPS 为权重的 2D KDE；低分辨率渲染后经高质量插值放大，
- * 叠在原图上呈连续渐变（非离散热块）。
+ * 2D KDE on patch centers with TPS as weight; rendered low-res then upsampled
+ * for a smooth overlay (not discrete patch blocks).
  */
 export function buildKdeTpsHeatmapCanvas(manifest: CaseManifest): HTMLCanvasElement {
   const meta = manifest.wsiMeta;
@@ -127,8 +130,8 @@ export function buildKdeTpsHeatmapCanvas(manifest: CaseManifest): HTMLCanvasElem
   small.height = gh;
   const sctx = small.getContext("2d");
   if (!sctx) {
-    canvas.width = tw;
-    canvas.height = th;
+    canvas.width = 1;
+    canvas.height = 1;
     return canvas;
   }
 
@@ -147,13 +150,22 @@ export function buildKdeTpsHeatmapCanvas(manifest: CaseManifest): HTMLCanvasElem
   }
   sctx.putImageData(sImg, 0, 0);
 
-  canvas.width = tw;
-  canvas.height = th;
+  let outW = tw;
+  let outH = th;
+  const maxEdge = Math.max(outW, outH);
+  if (maxEdge > MAX_HEATMAP_EDGE_PX) {
+    const s = MAX_HEATMAP_EDGE_PX / maxEdge;
+    outW = Math.max(1, Math.round(outW * s));
+    outH = Math.max(1, Math.round(outH * s));
+  }
+
+  canvas.width = outW;
+  canvas.height = outH;
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(small, 0, 0, tw, th);
+  ctx.drawImage(small, 0, 0, outW, outH);
 
   return canvas;
 }

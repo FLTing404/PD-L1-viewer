@@ -98,11 +98,13 @@ function LegendSwatch({
         style={{ backgroundColor: style.hex }}
         aria-hidden
       />
-      <span className={cn("text-app-body font-medium", style.text)}>
+      <span
+        className={cn(
+          "text-[10px] font-medium leading-none sm:text-[11px]",
+          style.text,
+        )}
+      >
         {style.label}
-      </span>
-      <span className="text-app-body tabular-nums text-muted-foreground">
-        ({pct.toFixed(1)}% · {count})
       </span>
     </div>
   );

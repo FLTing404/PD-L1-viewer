@@ -49,7 +49,7 @@ export function PatchTpsBubbleChart() {
             Patch · TPS
           </div>
           <p className="text-app-body mt-2 text-muted-foreground">
-            加载 case 后将显示 patch 中心 (x, y) 与 TPS 气泡图。
+            After loading a case, patch centers (x, y) and TPS bubbles appear here.
           </p>
         </CardContent>
       </Card>

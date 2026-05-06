@@ -10,12 +10,15 @@ export function toOsdTileSource(
   config: TileSourceConfig,
 ): OpenSeadragon.TileSourceOptions | string {
   switch (config.kind) {
-    case "image":
+    case "image": {
+      /* Huge single JPEG (e.g. stitched WSI): pyramid improves zoom/pan responsiveness */
+      const px = config.width * config.height;
       return {
         type: "image",
         url: config.url,
-        buildPyramid: false,
+        buildPyramid: px > 25_000_000,
       } as OpenSeadragon.TileSourceOptions;
+    }
     case "dzi":
       return config.url;
     case "iiif":

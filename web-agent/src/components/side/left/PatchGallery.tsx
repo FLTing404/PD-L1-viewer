@@ -18,17 +18,11 @@ import {
   type GallerySort,
 } from "@/lib/store";
 import { BUCKET_ORDER, BUCKET_STYLES } from "@/lib/bucket";
+import { formatPatchOriginXY } from "@/lib/patchDisplay";
 import type { PatchEntry } from "@/types/case";
 import { cn } from "@/lib/utils";
 
 export type PatchGalleryVariant = "grid" | "sidebar";
-
-function patchFileLabel(p: PatchEntry): string {
-  const rel = p.imageFile.replace(/\\/g, "/");
-  const parts = rel.split("/").filter(Boolean);
-  if (parts.length >= 2) return parts[parts.length - 2] ?? p.patchId;
-  return p.patchId;
-}
 
 export function PatchGallery({
   variant = "grid",
@@ -168,7 +162,7 @@ export function PatchGallery({
                   )}/image.jpg`
                 : "";
               const bucketStyle = BUCKET_STYLES[p.patchPredBucket];
-              const fname = patchFileLabel(p);
+              const xyLabel = formatPatchOriginXY(p);
               return (
                 <button
                   key={p.patchId}
@@ -180,7 +174,7 @@ export function PatchGallery({
                       ? "border-red-500 bg-red-500/10 ring-1 ring-red-500"
                       : "border-border bg-muted/20 hover:bg-muted/45",
                   )}
-                  title={p.patchId}
+                  title={`${p.patchId} · ${xyLabel}`}
                 >
                   <div className="size-10 shrink-0 overflow-hidden rounded bg-muted">
                     {thumbUrl ? (
@@ -196,12 +190,11 @@ export function PatchGallery({
                   <div className="min-w-0 flex-1">
                     <div
                       className={cn(
-                        "truncate font-mono text-app-body leading-tight",
+                        "font-mono text-app-body leading-tight tabular-nums",
                         isActive ? "text-red-200" : "text-foreground",
                       )}
-                      title={fname}
                     >
-                      {fname}
+                      {xyLabel}
                     </div>
                     <div className="text-app-body mt-0.5 text-muted-foreground">
                       TPS{" "}
@@ -247,14 +240,14 @@ export function PatchGallery({
                         ? "ring-2 ring-red-500"
                         : cn("ring-border hover:ring-2", bucketStyle.ring),
                     )}
-                    title={p.patchId}
+                    title={`${p.patchId} · ${formatPatchOriginXY(p)}`}
                   >
                     <div className="aspect-square w-full overflow-hidden bg-muted">
                       {thumbUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={thumbUrl}
-                          alt={p.patchId}
+                          alt=""
                           className="h-full w-full object-cover transition-transform group-hover:scale-105"
                           loading="lazy"
                         />
@@ -262,11 +255,14 @@ export function PatchGallery({
                     </div>
                     <span
                       className={cn(
-                        "text-app-body py-0.5 text-center font-mono font-semibold tabular-nums",
+                        "text-app-body py-0.5 text-center font-mono font-semibold tabular-nums leading-none",
                         isActive ? "text-red-300" : bucketStyle.text,
                       )}
                     >
                       {tpsPct}%
+                    </span>
+                    <span className="text-[10px] leading-tight text-center font-mono tabular-nums text-muted-foreground px-0.5 pb-0.5">
+                      {formatPatchOriginXY(p)}
                     </span>
                   </button>
                 );

@@ -6,6 +6,10 @@ import type {
   PatchBucket,
   PatchEntry,
 } from "@/types/case";
+import type {
+  LocalSelectionSummary,
+  WorldRect,
+} from "@/lib/localRoiStats";
 
 export type PanelLayer = "cell_class" | "center_prob" | "heatmap_overlay";
 
@@ -27,7 +31,7 @@ export type ChatStatus = "idle" | "streaming" | "error";
 
 const DEFAULT_THRESHOLD = 0.5;
 export const GALLERY_PAGE_SIZE = 16;
-/** 左侧边栏竖排列表每页条数（略多于网格，仍以滚动为主） */
+/** Sidebar gallery list page size (scroll-driven). */
 export const GALLERY_PAGE_SIZE_SIDEBAR = 24;
 
 export const DEFAULT_PANEL_LAYERS: PanelLayers = {
@@ -75,6 +79,13 @@ export interface ViewerState {
   chatStatus: ChatStatus;
   chatError?: string;
 
+  // Local ROI (WSI rectangular selection, snapped to patch grid)
+  localRoiDrawMode: boolean;
+  localRoi: {
+    world: WorldRect;
+    summary: LocalSelectionSummary;
+  } | null;
+
   loadCaseList: () => Promise<void>;
   setCase: (caseId: string) => Promise<void>;
   setSelectedPatch: (patchId: string | null) => Promise<void>;
@@ -93,6 +104,12 @@ export interface ViewerState {
   updateAssistantMessage: (id: string, content: string) => void;
   resetChat: () => void;
   setChatStatus: (status: ChatStatus, error?: string) => void;
+
+  setLocalRoiDrawMode: (enabled: boolean) => void;
+  setLocalRoi: (
+    payload: { world: WorldRect; summary: LocalSelectionSummary } | null,
+  ) => void;
+  clearLocalRoi: () => void;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -130,6 +147,9 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   chatMessages: [],
   chatStatus: "idle",
 
+  localRoiDrawMode: false,
+  localRoi: null,
+
   loadCaseList: async () => {
     set({ caseListStatus: "loading", caseListError: undefined });
     try {
@@ -156,6 +176,8 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
       galleryPage: 0,
       chatMessages: [],
       chatStatus: "idle",
+      localRoiDrawMode: false,
+      localRoi: null,
     });
     try {
       const manifest = await fetchJson<CaseManifest>(
@@ -231,6 +253,10 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   resetChat: () => set({ chatMessages: [], chatStatus: "idle", chatError: undefined }),
   setChatStatus: (status: ChatStatus, error?: string) =>
     set({ chatStatus: status, chatError: error }),
+
+  setLocalRoiDrawMode: (enabled: boolean) => set({ localRoiDrawMode: enabled }),
+  setLocalRoi: (payload) => set({ localRoi: payload }),
+  clearLocalRoi: () => set({ localRoi: null }),
 }));
 
 // ---------- selectors ----------
@@ -293,7 +319,7 @@ export interface WsiStats {
   meanTps: number;
   maxTps: number;
   bucketCounts: Record<string, number>;
-  /** 由各 patch 的 patchPredTps×numCells 四舍五入后求和，用于概览（无需加载全部 cells.csv） */
+  /** Sum of round(patchPredTps * numCells) per patch; no full cells.csv load. */
   positiveCells: number;
   negativeCells: number;
 }

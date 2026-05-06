@@ -5,7 +5,7 @@ import { WsiSummarySidebar } from "./WsiSummarySidebar";
 import { PatchTpsBubbleChart } from "./PatchTpsBubbleChart";
 import { PatchGallery } from "./PatchGallery";
 
-/** 与主页三栏 2:6:2 中的左侧一份 */
+/** Left column slot in the main 2:6:2 layout. */
 export function LeftSidebar() {
   return (
     <aside className="flex h-full min-h-0 min-w-0 flex-[2_1_0%] flex-col gap-2 overflow-hidden border-r border-border bg-background/85 py-2 pl-2.5 pr-2">

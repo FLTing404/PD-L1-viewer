@@ -100,7 +100,7 @@ export function AiAssistantChatBody({
   hideChrome = false,
 }: {
   className?: string;
-  /** 为浮层/弹窗使用时隐藏顶部标题行（由外层提供标题栏） */
+  /** When true, hide header chrome (floating shell provides its own title bar). */
   hideChrome?: boolean;
 }) {
   const caseId = useViewerStore((s) => s.caseId);
@@ -383,7 +383,7 @@ export function AiAssistantChatBody({
   );
 }
 
-/** 右栏内嵌布局用：与原先单列卡片一致。 */
+/** Right column embedded layout; matches the original single-column card. */
 export function AiAssistantPanel() {
   return <AiAssistantChatBody className="min-h-[280px]" />;
 }
