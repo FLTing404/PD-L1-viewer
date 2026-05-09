@@ -185,8 +185,8 @@ export function AiAssistantFloating() {
         type="button"
         title={
           open
-            ? "Drag to move · Click to close assistant"
-            : "Drag to move · Click to open AI assistant"
+            ? "Drag to move · Click to close"
+            : "Drag to move · Click to open Pathology Insight"
         }
         className={cn(
           "pointer-events-auto absolute flex items-center justify-center rounded-full border border-white/20 bg-primary text-primary-foreground shadow-lg shadow-black/40 transition-[box-shadow,transform] hover:scale-105 hover:shadow-xl active:scale-95",
@@ -207,7 +207,7 @@ export function AiAssistantFloating() {
       {open ? (
         <div
           role="dialog"
-          aria-label="AI assistant"
+          aria-label="Pathology Insight"
           className="pointer-events-auto absolute flex max-h-[min(70vh,560px)] w-[384px] flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xl"
           style={{ left: panelPos.x, top: panelPos.y, height: PANEL_H }}
         >
@@ -217,7 +217,7 @@ export function AiAssistantFloating() {
           >
             <GripVertical className="size-4 shrink-0 text-muted-foreground" />
             <span className="flex-1 text-sm font-semibold tracking-wide">
-              AI Assistant
+              Pathology Insight
             </span>
             <button
               type="button"

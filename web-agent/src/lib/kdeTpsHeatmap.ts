@@ -1,3 +1,4 @@
+import { patchesWithCellsForTps } from "@/lib/patchFilters";
 import type { CaseManifest } from "@/types/case";
 
 /** Avoid allocating canvas at full WSI pixels (e.g. 51k×26k); browsers reject / blank huge canvases. */
@@ -67,7 +68,7 @@ export function buildKdeTpsHeatmapCanvas(manifest: CaseManifest): HTMLCanvasElem
   const meta = manifest.wsiMeta;
   const tw = meta.thumbnailWidth;
   const th = meta.thumbnailHeight;
-  const patches = manifest.patches;
+  const patches = patchesWithCellsForTps(manifest.patches);
 
   const canvas = document.createElement("canvas");
   canvas.style.mixBlendMode = "multiply";

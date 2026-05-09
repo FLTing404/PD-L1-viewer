@@ -1,28 +1,63 @@
 "use client";
 
-import { useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   SelectedPatchDetailCard,
   SelectedPatchPreviewBand,
 } from "./SelectedPatchStackedView";
+import { useViewerStore } from "@/lib/store";
+import { cn } from "@/lib/utils";
 
 /**
- * Right column (2 of 2:6:2): mirrors LeftColumn — top band aligns with WSI+heatmap
- * row; bottom band aligns with TPS distribution + local summary strip.
+ * Right column: preview band (5) + detail strip (2), aligned with center column.
+ * Preview tiles are square (side = band height / 2); aside width equals that tile side so it
+ * matches the two stacked previews with no extra horizontal margin.
  */
 export function RightColumn() {
-  const previewShellRef = useRef<HTMLDivElement>(null);
+  const previewBandRef = useRef<HTMLDivElement>(null);
+  const [tileSizePx, setTileSizePx] = useState<number | null>(null);
+  const caseId = useViewerStore((s) => s.caseId);
+  const selectedPatchId = useViewerStore((s) => s.selectedPatchId);
+
+  useLayoutEffect(() => {
+    const el = previewBandRef.current;
+    if (!el) return;
+    const update = () => {
+      const h = el.getBoundingClientRect().height;
+      setTileSizePx(h > 0 ? h / 2 : null);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const measuredAsideWidth =
+    tileSizePx != null ? tileSizePx : undefined;
 
   return (
-    <aside className="flex h-full min-h-0 min-w-0 flex-[2_1_0%] flex-col gap-3 overflow-hidden border-l border-border bg-background/60 p-3">
+    <aside
+      className={cn(
+        "flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-l border-[#2d2d2d] bg-background/60",
+        measuredAsideWidth == null && "w-[clamp(360px,28vw,500px)]",
+      )}
+      style={
+        measuredAsideWidth != null
+          ? { width: `${Math.round(measuredAsideWidth)}px` }
+          : undefined
+      }
+    >
       <div
-        ref={previewShellRef}
-        className="relative flex min-h-0 min-w-0 flex-[5_1_0%] flex-col overflow-hidden rounded-xl ring-1 ring-foreground/10"
+        ref={previewBandRef}
+        className="relative flex min-h-0 min-w-0 flex-[5_1_0%] flex-col overflow-hidden"
       >
-        <SelectedPatchPreviewBand alignRootRef={previewShellRef} />
+        <SelectedPatchPreviewBand
+          key={`${caseId ?? ""}::${selectedPatchId ?? ""}`}
+          tileSizePx={tileSizePx}
+        />
       </div>
 
-      <div className="flex min-h-0 min-w-0 flex-[2_1_0%] flex-col gap-2 overflow-y-auto">
+      <div className="flex min-h-0 min-w-0 flex-[2_1_0%] flex-col overflow-y-auto border-t border-[#2d2d2d]">
         <SelectedPatchDetailCard />
       </div>
     </aside>

@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import path from "node:path";
-import fs from "node:fs/promises";
 import { getCaseDir, isValidCaseId, isValidPatchId } from "@/lib/data/paths";
 import { loadCells } from "@/lib/data/parseCells";
+import { resolveCellsCsvPath } from "@/lib/data/parseManifest";
 
 export const dynamic = "force-dynamic";
 
@@ -18,15 +17,9 @@ export async function GET(
   if (!isValidCaseId(caseId) || !isValidPatchId(patchId)) {
     return NextResponse.json({ error: "invalid_params" }, { status: 400 });
   }
-  const cellsPath = path.join(
-    getCaseDir(caseId),
-    "patches",
-    patchId,
-    "cells.csv",
-  );
-  try {
-    await fs.access(cellsPath);
-  } catch {
+  const caseDir = getCaseDir(caseId);
+  const cellsPath = await resolveCellsCsvPath(caseDir, patchId);
+  if (!cellsPath) {
     return NextResponse.json({ error: "cells_not_found" }, { status: 404 });
   }
   try {

@@ -9,6 +9,44 @@ export interface ImageSize {
   height: number;
 }
 
+function parseTiffDimensions(data: Buffer): ImageSize | null {
+  if (data.length < 8) return null;
+  const le = data[0] === 0x49 && data[1] === 0x49;
+  const be = data[0] === 0x4d && data[1] === 0x4d;
+  if (!le && !be) return null;
+  const r16 = (o: number) => (le ? data.readUInt16LE(o) : data.readUInt16BE(o));
+  const r32 = (o: number) => (le ? data.readUInt32LE(o) : data.readUInt32BE(o));
+  if (r16(2) !== 42) return null;
+  let ifd = r32(4);
+  for (let depth = 0; depth < 8; depth++) {
+    if (ifd <= 0 || ifd + 2 > data.length) break;
+    const n = r16(ifd);
+    let w = 0;
+    let h = 0;
+    for (let i = 0; i < n; i++) {
+      const off = ifd + 2 + i * 12;
+      if (off + 12 > data.length) break;
+      const tag = r16(off);
+      const type = r16(off + 2);
+      const count = r32(off + 4);
+      const raw = data.subarray(off + 8, off + 12);
+      if (tag === 256 && count === 1) {
+        if (type === 3) w = le ? raw.readUInt16LE(0) : raw.readUInt16BE(0);
+        else if (type === 4) w = le ? raw.readUInt32LE(0) : raw.readUInt32BE(0);
+      }
+      if (tag === 257 && count === 1) {
+        if (type === 3) h = le ? raw.readUInt16LE(0) : raw.readUInt16BE(0);
+        else if (type === 4) h = le ? raw.readUInt32LE(0) : raw.readUInt32BE(0);
+      }
+    }
+    if (w > 0 && h > 0) return { width: w, height: h };
+    const nextOff = ifd + 2 + n * 12;
+    if (nextOff + 4 > data.length) break;
+    ifd = r32(nextOff);
+  }
+  return null;
+}
+
 function parseJpegDimensions(data: Buffer): ImageSize | null {
   if (data.length < 4 || data[0] !== 0xff || data[1] !== 0xd8) return null;
   let i = 2;
@@ -67,6 +105,9 @@ export async function readImageSize(filePath: string): Promise<ImageSize> {
         height: data.readUInt32BE(20),
       };
     }
+
+    const tiff = parseTiffDimensions(data);
+    if (tiff) return tiff;
 
     const jpeg = parseJpegDimensions(data);
     if (jpeg) return jpeg;

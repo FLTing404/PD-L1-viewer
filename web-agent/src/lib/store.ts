@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type OpenSeadragon from "openseadragon";
 import type {
   CaseManifest,
   CaseSummary,
@@ -10,6 +11,7 @@ import type {
   LocalSelectionSummary,
   WorldRect,
 } from "@/lib/localRoiStats";
+import { patchesWithCellsForTps } from "@/lib/patchFilters";
 
 export type PanelLayer = "cell_class" | "center_prob" | "heatmap_overlay";
 
@@ -30,9 +32,9 @@ export interface ChatMessage {
 export type ChatStatus = "idle" | "streaming" | "error";
 
 const DEFAULT_THRESHOLD = 0.5;
-export const GALLERY_PAGE_SIZE = 16;
-/** Sidebar gallery list page size (scroll-driven). */
-export const GALLERY_PAGE_SIZE_SIDEBAR = 24;
+export const GALLERY_PAGE_SIZE = 8;
+/** Left Patch Gallery: fixed 6 rows/cards per page; remaining patches via pager. */
+export const GALLERY_PAGE_SIZE_SIDEBAR = 8;
 
 export const DEFAULT_PANEL_LAYERS: PanelLayers = {
   cell_class: true,
@@ -86,6 +88,13 @@ export interface ViewerState {
     summary: LocalSelectionSummary;
   } | null;
 
+  /** KDE TPS heatmap overlay on the main WSI viewer (toggle). */
+  tpsHeatmapVisible: boolean;
+
+  /** Main WSI OpenSeadragon viewer — exposed for left rail minimap (outside ViewerContext). */
+  osdViewer: OpenSeadragon.Viewer | null;
+  setOsdViewer: (viewer: OpenSeadragon.Viewer | null) => void;
+
   loadCaseList: () => Promise<void>;
   setCase: (caseId: string) => Promise<void>;
   setSelectedPatch: (patchId: string | null) => Promise<void>;
@@ -110,6 +119,9 @@ export interface ViewerState {
     payload: { world: WorldRect; summary: LocalSelectionSummary } | null,
   ) => void;
   clearLocalRoi: () => void;
+
+  setTpsHeatmapVisible: (visible: boolean) => void;
+  toggleTpsHeatmap: () => void;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -150,6 +162,11 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   localRoiDrawMode: false,
   localRoi: null,
 
+  tpsHeatmapVisible: false,
+
+  osdViewer: null,
+  setOsdViewer: (viewer) => set({ osdViewer: viewer }),
+
   loadCaseList: async () => {
     set({ caseListStatus: "loading", caseListError: undefined });
     try {
@@ -178,6 +195,7 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
       chatStatus: "idle",
       localRoiDrawMode: false,
       localRoi: null,
+      tpsHeatmapVisible: false,
     });
     try {
       const manifest = await fetchJson<CaseManifest>(
@@ -257,6 +275,10 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   setLocalRoiDrawMode: (enabled: boolean) => set({ localRoiDrawMode: enabled }),
   setLocalRoi: (payload) => set({ localRoi: payload }),
   clearLocalRoi: () => set({ localRoi: null }),
+
+  setTpsHeatmapVisible: (visible: boolean) => set({ tpsHeatmapVisible: visible }),
+  toggleTpsHeatmap: () =>
+    set((state) => ({ tpsHeatmapVisible: !state.tpsHeatmapVisible })),
 }));
 
 // ---------- selectors ----------
@@ -342,6 +364,8 @@ export function computeWsiStats(manifest: CaseManifest | null): WsiStats {
     TPS_1: 0,
     Negative: 0,
   };
+  const forTps = patchesWithCellsForTps(manifest.patches);
+
   let totalCells = 0;
   let positiveCells = 0;
   let tpsSum = 0;
@@ -349,17 +373,20 @@ export function computeWsiStats(manifest: CaseManifest | null): WsiStats {
   for (const p of manifest.patches) {
     totalCells += p.numCells;
     positiveCells += Math.round(p.patchPredTps * p.numCells);
+  }
+  positiveCells = Math.min(positiveCells, totalCells);
+  const negativeCells = totalCells - positiveCells;
+
+  for (const p of forTps) {
     tpsSum += p.patchPredTps;
     if (p.patchPredTps > tpsMax) tpsMax = p.patchPredTps;
     buckets[p.patchPredBucket] = (buckets[p.patchPredBucket] ?? 0) + 1;
   }
-  positiveCells = Math.min(positiveCells, totalCells);
-  const negativeCells = totalCells - positiveCells;
   return {
-    patchCount: manifest.patches.length,
+    patchCount: forTps.length,
     totalCells,
-    meanTps: manifest.patches.length === 0 ? 0 : tpsSum / manifest.patches.length,
-    maxTps: tpsMax,
+    meanTps: forTps.length === 0 ? 0 : tpsSum / forTps.length,
+    maxTps: forTps.length === 0 ? 0 : tpsMax,
     bucketCounts: buckets,
     positiveCells,
     negativeCells,

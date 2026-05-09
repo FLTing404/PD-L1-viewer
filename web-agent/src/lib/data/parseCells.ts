@@ -18,7 +18,8 @@ function parseCsvLine(line: string): string[] {
 }
 
 export async function loadCells(filePath: string): Promise<CellRecord[]> {
-  const text = await fs.readFile(filePath, "utf8");
+  const raw = await fs.readFile(filePath, "utf8");
+  const text = raw.replace(/^\uFEFF/, "");
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length <= 1) return [];
 

@@ -10,28 +10,19 @@ export function getCasesRoot(): string {
   return path.resolve(process.cwd(), "..", "data");
 }
 
-/**
- * Optional demo aliases: list multiple case IDs in the UI while reusing one
- * on-disk folder (no duplicated `data/<caseId>` trees).
- */
-const CASE_DATA_ALIASES: Record<string, string> = {
-  case2: "case1",
-  case3: "case1",
-};
-
 /** Physical folder under {@link getCasesRoot} that holds images / CSV for this case. */
 export function getCaseDir(caseId: string): string {
-  const source = CASE_DATA_ALIASES[caseId] ?? caseId;
-  return path.join(getCasesRoot(), source);
+  return path.join(getCasesRoot(), caseId);
 }
 
-const CASE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+/** Slides / exports use IDs like `DI2025-020430_2025-03-19_14_16_26` (letters, digits, `.`, `_`, `-`). */
+const CASE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 
 export function isValidCaseId(caseId: string): boolean {
   return CASE_ID_PATTERN.test(caseId);
 }
 
-const PATCH_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+const PATCH_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 
 export function isValidPatchId(patchId: string): boolean {
   return PATCH_ID_PATTERN.test(patchId);

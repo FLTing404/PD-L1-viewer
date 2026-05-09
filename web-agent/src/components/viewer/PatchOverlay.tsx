@@ -1,69 +1,71 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useOsdViewer } from "./ViewerContext";
+import { makeRoiRegionFrame, makePatchSeverityFrame } from "./viewerRegionFrame";
+import { BUCKET_STYLES } from "@/lib/bucket";
+import { patchBucketFromPredTps } from "@/lib/tpsHistogram";
 import { useViewerStore } from "@/lib/store";
 import type { PatchEntry } from "@/types/case";
 
-function makeSelectionFrame(): HTMLDivElement {
-  const div = document.createElement("div");
-  div.style.boxSizing = "border-box";
-  div.style.width = "100%";
-  div.style.height = "100%";
-  div.style.border = "2px solid #ff3b30";
-  div.style.boxShadow =
-    "0 0 0 1px rgba(0,0,0,0.4), 0 0 12px rgba(255,59,48,0.6)";
-  div.style.pointerEvents = "none";
-  div.style.borderRadius = "2px";
-  return div;
-}
-
-function makeLocalRoiFrame(): HTMLDivElement {
-  const div = document.createElement("div");
-  div.style.boxSizing = "border-box";
-  div.style.width = "100%";
-  div.style.height = "100%";
-  div.style.border = "2px dashed rgba(56,189,248,0.95)";
-  div.style.boxShadow =
-    "0 0 0 1px rgba(0,0,0,0.35), inset 0 0 20px rgba(56,189,248,0.12)";
-  div.style.pointerEvents = "none";
-  div.style.borderRadius = "2px";
-  div.style.background = "rgba(56,189,248,0.06)";
-  return div;
-}
-
-/** Left WSI: selected patch frame + local ROI overlay (no bucket tint blocks). */
+/** WSI: dashed ROI + thin solid bucket-coloured frame on selected / worst-in-ROI patch. */
 export function PatchOverlay() {
   const { viewer } = useOsdViewer();
   const manifest = useViewerStore((s) => s.manifest);
   const selectedPatchId = useViewerStore((s) => s.selectedPatchId);
   const localRoi = useViewerStore((s) => s.localRoi);
+  const ownOverlaysRef = useRef<HTMLElement[]>([]);
+
+  /** Avoid re-subscribing OSD handlers on every patch click (was causing full viewer flash). */
+  const selectedPatchIdRef = useRef(selectedPatchId);
+  const localRoiRef = useRef(localRoi);
+  selectedPatchIdRef.current = selectedPatchId;
+  localRoiRef.current = localRoi;
+
+  const refreshRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!viewer || !manifest) return;
 
     const meta = manifest.wsiMeta;
 
-    const refresh = () => {
-      if (viewer.world.getItemCount() === 0) return;
-      viewer.clearOverlays();
+    const removeOwnOverlays = () => {
+      for (const el of ownOverlaysRef.current) {
+        try {
+          viewer.removeOverlay(el);
+        } catch {
+          /* ignore */
+        }
+      }
+      ownOverlaysRef.current = [];
+    };
 
-      if (localRoi) {
-        const r = localRoi.world;
+    const refresh = () => {
+      removeOwnOverlays();
+      if (viewer.world.getItemCount() === 0) return;
+
+      const next: HTMLElement[] = [];
+      const roi = localRoiRef.current;
+      const sid = selectedPatchIdRef.current;
+
+      if (roi) {
+        const r = roi.world;
         const ix = r.x * meta.thumbScaleX;
         const iy = r.y * meta.thumbScaleY;
         const iw = r.w * meta.thumbScaleX;
         const ih = r.h * meta.thumbScaleY;
         const roiRect = viewer.viewport.imageToViewportRectangle(ix, iy, iw, ih);
+        const el = makeRoiRegionFrame();
         viewer.addOverlay({
-          element: makeLocalRoiFrame(),
+          element: el,
           location: roiRect,
         });
+        next.push(el);
       }
 
-      if (selectedPatchId) {
+      if (sid) {
         const sel = manifest.patches.find(
-          (p) => p.patchId === selectedPatchId,
+          (p) => p.patchId === sid,
         ) as PatchEntry | undefined;
         if (sel) {
           const ix = sel.px * meta.thumbScaleX;
@@ -71,26 +73,35 @@ export function PatchOverlay() {
           const iw = sel.width * meta.thumbScaleX;
           const ih = sel.height * meta.thumbScaleY;
           const rect = viewer.viewport.imageToViewportRectangle(ix, iy, iw, ih);
+          const bucket = patchBucketFromPredTps(sel.patchPredTps);
+          const hex = BUCKET_STYLES[bucket].hex;
+          const el = makePatchSeverityFrame(hex);
           viewer.addOverlay({
-            element: makeSelectionFrame(),
+            element: el,
             location: rect,
           });
+          next.push(el);
         }
       }
+
+      ownOverlaysRef.current = next;
     };
+
+    refreshRef.current = refresh;
 
     viewer.addHandler("open", refresh);
     refresh();
 
     return () => {
+      refreshRef.current = null;
       viewer.removeHandler("open", refresh);
-      try {
-        viewer.clearOverlays();
-      } catch {
-        /* viewer may be destroyed */
-      }
+      removeOwnOverlays();
     };
-  }, [viewer, manifest, selectedPatchId, localRoi]);
+  }, [viewer, manifest]);
+
+  useLayoutEffect(() => {
+    refreshRef.current?.();
+  }, [selectedPatchId, localRoi]);
 
   return null;
 }

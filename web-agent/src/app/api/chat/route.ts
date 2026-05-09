@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
-import path from "node:path";
-import fs from "node:fs/promises";
 import {
   getCaseDir,
   isValidCaseId,
   isValidPatchId,
 } from "@/lib/data/paths";
-import { loadCaseManifest } from "@/lib/data/parseManifest";
+import {
+  loadCaseManifest,
+  resolveCellsCsvPath,
+} from "@/lib/data/parseManifest";
 import { loadCells } from "@/lib/data/parseCells";
 import { computeCellStats, computeWsiStats } from "@/lib/store";
 
@@ -71,21 +72,20 @@ async function buildCaseContext(
           `  - WSI position: x=${patch.px}, y=${patch.py} (size ${patch.width}×${patch.height})`,
         );
 
-        const cellsCsv = path.join(
+        const cellsCsv = await resolveCellsCsvPath(
           getCaseDir(caseId),
-          "patches",
           selectedPatchId,
-          "cells.csv",
         );
-        try {
-          await fs.access(cellsCsv);
-          const cells = await loadCells(cellsCsv);
-          const cs = computeCellStats(cells, threshold);
-          lines.push(
-            `  - At threshold ${threshold.toFixed(2)}: positive=${cs.positive} (${(cs.positiveRatio * 100).toFixed(2)}%), negative=${cs.negative}, borderline (±0.05)=${cs.borderline}, mean cell pos. prob.=${cs.meanProb.toFixed(3)}`,
-          );
-        } catch {
-          /* ignore missing cells.csv */
+        if (cellsCsv) {
+          try {
+            const cells = await loadCells(cellsCsv);
+            const cs = computeCellStats(cells, threshold);
+            lines.push(
+              `  - At threshold ${threshold.toFixed(2)}: positive=${cs.positive} (${(cs.positiveRatio * 100).toFixed(2)}%), negative=${cs.negative}, borderline (±0.05)=${cs.borderline}, mean cell pos. prob.=${cs.meanProb.toFixed(3)}`,
+            );
+          } catch {
+            /* ignore corrupt cells.csv */
+          }
         }
       }
     }
@@ -119,7 +119,7 @@ export async function POST(req: Request) {
       {
         error: "deepseek_api_key_missing",
         message:
-          "Set DEEPSEEK_API_KEY in code/web-agent/.env.local before using the AI Assistant.",
+          "Set DEEPSEEK_API_KEY in code/web-agent/.env.local before using Pathology Insight.",
       },
       { status: 503 },
     );

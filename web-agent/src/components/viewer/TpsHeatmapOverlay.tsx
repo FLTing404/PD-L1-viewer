@@ -1,53 +1,60 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useOsdViewer } from "./ViewerContext";
 import { useViewerStore } from "@/lib/store";
 import { buildKdeTpsHeatmapCanvas } from "@/lib/kdeTpsHeatmap";
 
-/** Right pane: full WSI with continuous KDE heatmap tint (not patch blocks). */
+/** Optional KDE TPS heatmap on the main WSI viewer; toggled from the toolbar. */
 export function TpsHeatmapOverlay() {
-  const { heatmapViewer } = useOsdViewer();
+  const { viewer } = useOsdViewer();
   const manifest = useViewerStore((s) => s.manifest);
+  const tpsHeatmapVisible = useViewerStore((s) => s.tpsHeatmapVisible);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
-    if (!heatmapViewer || !manifest) return;
+    if (!viewer || !manifest) return;
 
     const meta = manifest.wsiMeta;
     const tw = meta.thumbnailWidth;
     const th = meta.thumbnailHeight;
 
-    const applyOverlay = () => {
-      if (heatmapViewer.world.getItemCount() === 0) return;
+    const removeHeatmapOverlay = () => {
+      const el = canvasRef.current;
+      if (!el) return;
       try {
-        heatmapViewer.clearOverlays();
+        viewer.removeOverlay(el);
       } catch {
-        return;
+        /* overlay may already be gone */
       }
+      canvasRef.current = null;
+    };
 
+    const applyOverlay = () => {
+      removeHeatmapOverlay();
+
+      if (!tpsHeatmapVisible) return;
+      if (viewer.world.getItemCount() === 0) return;
       if (tw <= 0 || th <= 0 || manifest.patches.length === 0) return;
 
       const canvas = buildKdeTpsHeatmapCanvas(manifest);
+      canvasRef.current = canvas;
 
-      const rect = heatmapViewer.viewport.imageToViewportRectangle(0, 0, tw, th);
-      heatmapViewer.addOverlay({
+      const rect = viewer.viewport.imageToViewportRectangle(0, 0, tw, th);
+      viewer.addOverlay({
         element: canvas,
         location: rect,
       });
     };
 
-    heatmapViewer.addHandler("open", applyOverlay);
+    viewer.addHandler("open", applyOverlay);
     applyOverlay();
 
     return () => {
-      heatmapViewer.removeHandler("open", applyOverlay);
-      try {
-        heatmapViewer.clearOverlays();
-      } catch {
-        /* destroyed */
-      }
+      viewer.removeHandler("open", applyOverlay);
+      removeHeatmapOverlay();
     };
-  }, [heatmapViewer, manifest]);
+  }, [viewer, manifest, tpsHeatmapVisible]);
 
   return null;
 }

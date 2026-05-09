@@ -9,6 +9,7 @@ import {
   type PanelLayer,
 } from "@/lib/store";
 import { formatPatchOriginXY } from "@/lib/patchDisplay";
+import { patchPreviewFileUrlFromEntry } from "@/lib/patchPreviewUrl";
 import { cn } from "@/lib/utils";
 
 interface LayerOption {
@@ -17,8 +18,8 @@ interface LayerOption {
 }
 
 const LAYERS: LayerOption[] = [
-  { value: "cell_class", label: "Cell Class" },
-  { value: "heatmap_overlay", label: "Heatmap" },
+  { value: "cell_class", label: "Cell labels" },
+  { value: "heatmap_overlay", label: "P(cell) map" },
 ];
 
 interface ZoomState {
@@ -55,9 +56,7 @@ export function SelectedPatchView() {
 
   const previewUrl =
     patch && caseId
-      ? `/api/cases/${encodeURIComponent(caseId)}/file/preview/by_patch/${encodeURIComponent(
-          patch.patchId,
-        )}/${selectedLayer}.png`
+      ? patchPreviewFileUrlFromEntry(caseId, patch, selectedLayer)
       : null;
 
   const prevKeyRef = useRef<string>("init");

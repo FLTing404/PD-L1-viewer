@@ -10,7 +10,7 @@ Case assets live under **`data/<caseId>/`** (e.g. `patches/`, `stitched.jpg`, op
 
 - **Top bar**: title, case selector, case ID, Export Report (placeholder).
 - **Left column**
-  - Top: OpenSeadragon WSI (navigator + overlays).
+  - Top: OpenSeadragon WSI (navigator + overlays). Optional **TPS heatmap** overlay on the WSI (toolbar toggle next to ROI).
   - Middle: TPS distribution (stacked bar + legend), WSI summary.
   - Bottom: Patch Gallery — buckets (`>50% / 10–50% / 1–10% / <1%`), sort, thumbnails, pagination; click selects patch and flies the viewer.
 - **Right column**
@@ -35,8 +35,9 @@ From **this `code/` directory**, `data/` is at `./data`. Default cases root is `
 
 ```bash
 # Windows PowerShell
-$env:CASES_ROOT = "D:\path\to\my\cases"
+$env:CASES_ROOT = "D:\path\to\my\data"
 pnpm dev
+pnpm start
 ```
 
 ## AI Assistant (`POST /api/chat`)
@@ -48,13 +49,34 @@ Builds an English system prompt with WSI stats; if a patch is selected, includes
 | Env | Default | Notes |
 | --- | --- | --- |
 | `DEEPSEEK_API_KEY` | (none) | Without it, `/api/chat` returns 503 |
-| `CASES_ROOT` | `..\data` (from `web-agent`; resolves to `code/data`) | Root folder containing `case1`, … |
+| `CASES_ROOT` | `..\data` (from `web-agent`; resolves to `code/data`) | Root folder containing one subdirectory per case (e.g. `DI2025-020430_2025-03-19_14_16_26`) |
 
-### Large WSI (Deep Zoom)
+### Large WSI (stitch + Deep Zoom)
 
 - The viewer prefers **`stitched.jpg`** at `data/<caseId>/stitched.jpg`, served via `/api/cases/<caseId>/file/stitched.jpg`. The URL segment **`file` is only the API route**, not a folder on disk.
 - For smooth zoom on huge images, generate tiles with **libvips** and add **`dzi/stitched.dzi`** plus **`dzi/stitched_files/`** under the case folder; manifest prefers DZI over a single JPEG.
-- Example: `python data/case1/build_dzi_from_stitched.py` (run from **`code/`**, with `vips` on `PATH`).
+
+If a case folder only has **`patches/`** and **`patches_manifest.csv`**, build assets from repo root **`code/`**:
+
+1. **Stitch patch JPEGs** → `stitched.jpg` (and optional `thumbnail.png` + minimal `wsi_summary.json` if missing). Large canvases require **pyvips** and **libvips** (Pillow alone is capped by `--max-pil-pixels`, default 120M pixels).
+
+   ```bash
+   python data/script/build_stitched_from_patches.py DI2025-016679_2025-03-10_13_47_56
+   ```
+
+2. **Deep Zoom** (requires **`vips`** on `PATH`):
+
+   ```bash
+   python data/script/build_dzi_from_stitched.py DI2025-016679_2025-03-10_13_47_56
+   ```
+
+3. **Both** in one command:
+
+   ```bash
+   python data/script/build_case_viewer_assets.py DI2025-016679_2025-03-10_13_47_56
+   ```
+
+Use `--cases-root` if your data root is not `code/data`. Use `build_stitched_from_patches.py --dry-run` to print canvas size without writing files.
 
 ### Production notes
 

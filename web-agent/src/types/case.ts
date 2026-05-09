@@ -41,6 +41,10 @@ export interface CaseSummary {
   caseId: string;
   wsiId: string;
   numExportedPatches: number;
+  /** Mean patch-level TPS in 0–1, from `patches_manifest.csv`. */
+  meanPatchTps: number;
+  /** Thumbnail path under the case directory (e.g. `thumbnail.png`). */
+  thumbnailRelative: string;
 }
 
 export interface CaseManifest {

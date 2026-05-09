@@ -1,5 +1,5 @@
 # Large case exports under data/ (patches, stitched.jpg, DZI tiles)
-**/case*/
+**/data*/
 
 # Dependencies & Next.js outputs (any app under code/, e.g. web-agent/)
 **/node_modules/

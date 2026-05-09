@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type OpenSeadragonNS from "openseadragon";
-import { SquareDashed } from "lucide-react";
+import { Flame, SquareDashed } from "lucide-react";
 import { useOsdViewer } from "./ViewerContext";
+import { VIEWER_REGION_FRAME_BOX_CLASS } from "./viewerRegionFrame";
 import { useViewerStore } from "@/lib/store";
 import {
   computeLocalSelectionFromUserRect,
@@ -36,32 +37,55 @@ async function clientToImage(
   return viewer.viewport.viewerElementToImageCoordinates(p);
 }
 
-/** Toolbar toggle and drag overlay for local ROI selection next to the WSI label. */
+/** Toolbar toggles next to the WSI label: local ROI draw mode and optional TPS heatmap overlay. */
 export function LocalRoiToolbar() {
   const drawMode = useViewerStore((s) => s.localRoiDrawMode);
   const setDrawMode = useViewerStore((s) => s.setLocalRoiDrawMode);
   const manifest = useViewerStore((s) => s.manifest);
+  const tpsHeatmapVisible = useViewerStore((s) => s.tpsHeatmapVisible);
+  const toggleTpsHeatmap = useViewerStore((s) => s.toggleTpsHeatmap);
 
   return (
-    <button
-      type="button"
-      disabled={!manifest}
-      title={
-        drawMode
-          ? "Drag on the image to draw a rectangle; release to snap to patch bounds."
-          : "Enable local ROI: drag to draw a rectangle."
-      }
-      onClick={() => setDrawMode(!drawMode)}
-      className={cn(
-        "flex items-center gap-1 rounded px-2 py-0.5 text-[12px] font-medium backdrop-blur-sm transition-colors disabled:opacity-40",
-        drawMode
-          ? "bg-sky-500/90 text-white"
-          : "bg-black/55 text-white/90 hover:bg-black/70",
-      )}
-    >
-      <SquareDashed className="size-3.5 shrink-0" aria-hidden />
-      ROI
-    </button>
+    <div className="flex flex-wrap items-center gap-1">
+      <button
+        type="button"
+        disabled={!manifest}
+        title={
+          drawMode
+            ? "Drag on the image to draw a rectangle; release to snap to patch bounds."
+            : "Enable local ROI: drag to draw a rectangle."
+        }
+        onClick={() => setDrawMode(!drawMode)}
+        className={cn(
+          "flex items-center gap-1 rounded px-2 py-0.5 text-[12px] font-medium backdrop-blur-sm transition-colors disabled:opacity-40",
+          drawMode
+            ? "bg-sky-500/90 text-white"
+            : "bg-black/55 text-white/90 hover:bg-black/70",
+        )}
+      >
+        <SquareDashed className="size-3.5 shrink-0" aria-hidden />
+        ROI
+      </button>
+      <button
+        type="button"
+        disabled={!manifest || !manifest.patches.length}
+        title={
+          tpsHeatmapVisible
+            ? "Hide KDE TPS heatmap overlay on the WSI."
+            : "Show KDE TPS heatmap overlay on the WSI."
+        }
+        onClick={() => toggleTpsHeatmap()}
+        className={cn(
+          "flex items-center gap-1 rounded px-2 py-0.5 text-[12px] font-medium backdrop-blur-sm transition-colors disabled:opacity-40",
+          tpsHeatmapVisible
+            ? "bg-amber-600/90 text-white"
+            : "bg-black/55 text-white/90 hover:bg-black/70",
+        )}
+      >
+        <Flame className="size-3.5 shrink-0" aria-hidden />
+        TPS heatmap
+      </button>
+    </div>
   );
 }
 
@@ -200,7 +224,10 @@ export function LocalRoiSelector() {
       </div>
       {rubber && rubber.w > 1 && rubber.h > 1 ? (
         <div
-          className="pointer-events-none absolute border-2 border-dashed border-sky-300/95 bg-sky-400/15"
+          className={cn(
+            "pointer-events-none absolute",
+            VIEWER_REGION_FRAME_BOX_CLASS,
+          )}
           style={{
             left: rubber.x,
             top: rubber.y,

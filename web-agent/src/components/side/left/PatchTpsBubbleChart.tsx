@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { patchesWithCellsForTps } from "@/lib/patchFilters";
 import { useViewerStore } from "@/lib/store";
 import type { PatchEntry } from "@/types/case";
 
@@ -29,15 +30,16 @@ export function PatchTpsBubbleChart() {
         patches: [] as PatchEntry[],
       };
     }
-    const ts = manifest.patches.map((p) => p.patchPredTps);
-    const mn = Math.min(...ts, 0);
-    const mx = Math.max(...ts, mn + 1e-9);
+    const withCells = patchesWithCellsForTps(manifest.patches);
+    const ts = withCells.map((p) => p.patchPredTps);
+    const mn = ts.length ? Math.min(...ts) : 0;
+    const mx = ts.length ? Math.max(...ts, mn + 1e-9) : 1;
     return {
       wsiW: manifest.wsiMeta.wsiWidth,
       wsiH: manifest.wsiMeta.wsiHeight,
       minTps: mn,
       maxTps: mx,
-      patches: manifest.patches,
+      patches: withCells,
     };
   }, [manifest]);
 

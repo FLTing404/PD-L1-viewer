@@ -10,6 +10,10 @@ import {
   type PanelLayer,
 } from "@/lib/store";
 import { formatPatchOriginXY } from "@/lib/patchDisplay";
+import {
+  patchPreviewFileUrlFromEntry,
+} from "@/lib/patchPreviewUrl";
+import type { PatchEntry } from "@/types/case";
 import { cn } from "@/lib/utils";
 
 interface PanelImageInfo {
@@ -18,8 +22,8 @@ interface PanelImageInfo {
 }
 
 const ALL_PANELS: PanelImageInfo[] = [
-  { key: "cell_class", label: "Cell Class" },
-  { key: "heatmap_overlay", label: "Heatmap" },
+  { key: "cell_class", label: "Cell labels" },
+  { key: "heatmap_overlay", label: "P(cell) map" },
 ];
 
 const MIN_ZOOM = 1;
@@ -198,7 +202,7 @@ export function PatchPanelOverlay() {
             <PreviewTile
               key={p.key}
               caseId={caseId}
-              patchId={patch.patchId}
+              patch={patch}
               kind={p.key}
               label={p.label}
               size={tileSize}
@@ -214,7 +218,7 @@ export function PatchPanelOverlay() {
 
 function PreviewTile({
   caseId,
-  patchId,
+  patch,
   kind,
   label,
   size,
@@ -222,14 +226,14 @@ function PreviewTile({
   setTransform,
 }: {
   caseId: string;
-  patchId: string;
+  patch: PatchEntry;
   kind: PanelLayer;
   label: string;
   size: number;
   transform: ZoomState;
   setTransform: React.Dispatch<React.SetStateAction<ZoomState>>;
 }) {
-  const url = `/api/cases/${encodeURIComponent(caseId)}/file/preview/by_patch/${encodeURIComponent(patchId)}/${kind}.png`;
+  const url = patchPreviewFileUrlFromEntry(caseId, patch, kind);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Non-passive wheel listener so we can preventDefault and avoid page scroll.
@@ -315,7 +319,7 @@ function PreviewTile({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={url}
-          alt={`${label} preview of ${patchId}`}
+          alt={`${label} preview of ${patch.patchId}`}
           width={size}
           height={size}
           className="block select-none"

@@ -9,6 +9,32 @@ export const dynamic = "force-dynamic";
 interface RawSummary {
   wsi_id?: string;
   num_exported_patches?: number;
+  thumbnail_file?: string;
+}
+
+function meanPatchTpsFromManifestCsv(text: string): number {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return 0;
+  const header = lines[0]!.split(",").map((h) => h.trim());
+  const tpsIdx = header.indexOf("patch_pred_tps");
+  const numCellsIdx = header.indexOf("num_cells");
+  if (tpsIdx < 0) return 0;
+  let sum = 0;
+  let n = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i]!.split(",");
+    if (numCellsIdx >= 0) {
+      const nc = parseInt(parts[numCellsIdx] ?? "0", 10);
+      if (!Number.isFinite(nc) || nc <= 0) continue;
+    }
+    const raw = parts[tpsIdx];
+    const v = parseFloat(raw ?? "");
+    if (Number.isFinite(v)) {
+      sum += v;
+      n++;
+    }
+  }
+  return n > 0 ? sum / n : 0;
 }
 
 export async function GET() {
@@ -34,21 +60,32 @@ export async function GET() {
     } catch {
       continue;
     }
+    let meanPatchTps = 0;
+    let thumbRel = "thumbnail.png";
+    let wsiId = name;
+    let numPatches = 0;
     try {
       const text = await fs.readFile(summaryPath, "utf8");
       const raw = JSON.parse(text) as RawSummary;
-      cases.push({
-        caseId: name,
-        wsiId: raw.wsi_id ?? name,
-        numExportedPatches: raw.num_exported_patches ?? 0,
-      });
+      wsiId = raw.wsi_id ?? name;
+      numPatches = raw.num_exported_patches ?? 0;
+      if (raw.thumbnail_file) thumbRel = raw.thumbnail_file;
     } catch {
-      cases.push({
-        caseId: name,
-        wsiId: name,
-        numExportedPatches: 0,
-      });
+      /* keep defaults */
     }
+    try {
+      const csvText = await fs.readFile(manifestPath, "utf8");
+      meanPatchTps = meanPatchTpsFromManifestCsv(csvText);
+    } catch {
+      /* ignore */
+    }
+    cases.push({
+      caseId: name,
+      wsiId,
+      numExportedPatches: numPatches,
+      meanPatchTps,
+      thumbnailRelative: thumbRel,
+    });
   }
 
   cases.sort((a, b) => a.caseId.localeCompare(b.caseId));

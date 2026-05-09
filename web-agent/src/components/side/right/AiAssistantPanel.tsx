@@ -267,7 +267,7 @@ export function AiAssistantChatBody({
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide">
               <Sparkles className="size-3.5 text-primary" />
-              AI Assistant
+              Pathology Insight
             </span>
             <div className="flex items-center gap-2">
               <span className="flex items-center gap-1 text-[12px] text-emerald-400">
@@ -315,10 +315,9 @@ export function AiAssistantChatBody({
                   <Bot className="size-3.5" />
                 </div>
                 <p className="leading-relaxed">
-                  Hello! I&apos;m your pathology AI assistant. I can help you
-                  analyze TPS scores, cell counts, patch patterns, and discuss
-                  general PD-L1 therapy considerations grounded in the current
-                  case data.
+                  Hello! I&apos;m Pathology Insight. I can help you analyze TPS
+                  scores, cell counts, patch patterns, and discuss general PD-L1
+                  therapy considerations grounded in the current case data.
                 </p>
               </div>
               <div className="space-y-1.5">

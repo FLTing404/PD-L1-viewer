@@ -1,22 +1,11 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "TPS Patch Analysis",
+  title: "PD-L1 TPS Visual Analytics · ChinaVis",
   description:
-    "PD-L1 TPS assistive viewer with case-grounded AI agent: WSI navigation, patch gallery, cell-level statistics and DeepSeek-backed chat.",
+    "Research prototype for multiscale PD-L1 tumor proportion score (TPS) analysis: whole-slide navigation, patch-level inference with spatial Hilbert ordering, cell-scale evidence, and optional LLM-assisted case reasoning.",
 };
 
 export default function RootLayout({
@@ -27,7 +16,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+      className="dark h-full font-sans antialiased"
     >
       <body className="h-full overflow-hidden bg-background text-foreground">
         <TooltipProvider delay={120}>{children}</TooltipProvider>

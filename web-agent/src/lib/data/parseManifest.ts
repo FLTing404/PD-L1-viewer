@@ -18,6 +18,7 @@ import {
   readDziXmlMeta,
   readImageSize,
 } from "./tileSource";
+import { safeJoin } from "@/lib/data/paths";
 
 interface RawWsiSummary {
   wsi_id: string;
@@ -63,7 +64,8 @@ function parseCsvLine(line: string): string[] {
 }
 
 function parseCsv(text: string): Record<string, string>[] {
-  const lines = text
+  const cleaned = text.replace(/^\uFEFF/, "");
+  const lines = cleaned
     .split(/\r?\n/)
     .filter((line) => line.trim().length > 0);
   if (lines.length === 0) return [];
@@ -114,6 +116,34 @@ async function fileExists(absPath: string): Promise<boolean> {
   }
 }
 
+/**
+ * Locates `cells.csv` for a patch. Tries `patches/<patchId>/cells.csv` first, then
+ * the `cells_csv` path in `patches_manifest.csv` (folder name may be e.g. `patch_x0_y0`
+ * while `patch_id` uses another prefix).
+ */
+export async function resolveCellsCsvPath(
+  caseDir: string,
+  patchId: string,
+): Promise<string | null> {
+  const direct = path.join(caseDir, "patches", patchId, "cells.csv");
+  if (await fileExists(direct)) return direct;
+
+  const manifestPath = path.join(caseDir, "patches_manifest.csv");
+  if (!(await fileExists(manifestPath))) return null;
+
+  const text = await fs.readFile(manifestPath, "utf8");
+  const rows = parseCsv(text);
+  for (const row of rows) {
+    if (row.patch_id !== patchId) continue;
+    const rel = (row.cells_csv ?? "").replace(/\\/g, "/").trim();
+    if (!rel) continue;
+    const abs = safeJoin(caseDir, rel);
+    if (!abs) continue;
+    if (await fileExists(abs)) return abs;
+  }
+  return null;
+}
+
 /** Prefer Deep Zoom tiles when present (generated offline with libvips `dzsave`). */
 const DZI_CANDIDATES = ["dzi/stitched.dzi", "dzi/slide.dzi"] as const;
 
@@ -131,8 +161,34 @@ async function tryResolveDziTileSource(
   return null;
 }
 
-/** Prefer full-resolution stitch next to thumbnail.png (see code/data/case1/stitched.jpg). */
-const STITCHED_FILENAME = "stitched.jpg";
+/** Browser-safe single-image viewer sources (TIFF is used offline → DZI; OSD image tiles rarely decode TIFF). */
+const STITCHED_BROWSER_CANDIDATES = ["stitched.jpg", "stitched.png"] as const;
+
+/** Full-res mosaic paths for WSI extent (includes TIFF written when JPEG edge > ~65500). */
+const STITCHED_EXTENT_CANDIDATES = [
+  "stitched.jpg",
+  "stitched.png",
+  "stitched.tif",
+  "stitched.tiff",
+] as const;
+
+async function tryResolveBrowserStitchedPath(
+  caseDir: string,
+): Promise<{ abs: string; rel: string } | null> {
+  for (const rel of STITCHED_BROWSER_CANDIDATES) {
+    const abs = path.join(caseDir, rel);
+    if (await fileExists(abs)) return { abs, rel };
+  }
+  return null;
+}
+
+async function tryResolveStitchedExtentPath(caseDir: string): Promise<string | null> {
+  for (const rel of STITCHED_EXTENT_CANDIDATES) {
+    const abs = path.join(caseDir, rel);
+    if (await fileExists(abs)) return abs;
+  }
+  return null;
+}
 
 export async function loadCaseManifest(
   caseId: string,
@@ -184,18 +240,25 @@ export async function loadCaseManifest(
     wsiWidth = dziSource.width;
     wsiHeight = dziSource.height;
   } else {
-    const stitchedPath = path.join(caseDir, STITCHED_FILENAME);
     const thumbPath = path.join(caseDir, wsiSummary.thumbnailFile);
-    const useStitched = await fileExists(stitchedPath);
+    const browserStitched = await tryResolveBrowserStitchedPath(caseDir);
+    const extentAbs = await tryResolveStitchedExtentPath(caseDir);
+    const useStitched = browserStitched !== null;
 
-    const viewerDiskPath = useStitched ? stitchedPath : thumbPath;
-    const viewerRelPath = useStitched ? STITCHED_FILENAME : wsiSummary.thumbnailFile;
+    const viewerDiskPath = useStitched ? browserStitched.abs : thumbPath;
+    const viewerRelPath = useStitched ? browserStitched.rel : wsiSummary.thumbnailFile;
 
     viewerSize = await readImageSize(viewerDiskPath);
 
-    if (useStitched && viewerSize.width > 0 && viewerSize.height > 0) {
-      wsiWidth = viewerSize.width;
-      wsiHeight = viewerSize.height;
+    const extentPath = useStitched ? browserStitched.abs : extentAbs;
+    let extentSize = { width: 0, height: 0 };
+    if (extentPath) {
+      extentSize = await readImageSize(extentPath);
+    }
+
+    if (extentSize.width > 0 && extentSize.height > 0) {
+      wsiWidth = extentSize.width;
+      wsiHeight = extentSize.height;
     } else if (!wsiWidth || !wsiHeight) {
       const extent = deriveWsiExtent(patches);
       wsiWidth = extent.wsiWidth;

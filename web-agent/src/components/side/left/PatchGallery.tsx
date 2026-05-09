@@ -4,22 +4,15 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   GALLERY_PAGE_SIZE,
   GALLERY_PAGE_SIZE_SIDEBAR,
-  computeWsiStats,
   useViewerStore,
-  type GallerySort,
 } from "@/lib/store";
-import { BUCKET_ORDER, BUCKET_STYLES } from "@/lib/bucket";
+import { BUCKET_STYLES } from "@/lib/bucket";
 import { formatPatchOriginXY } from "@/lib/patchDisplay";
+import { caseFileRelativeUrl } from "@/lib/patchPreviewUrl";
 import type { PatchEntry } from "@/types/case";
+import { patchesWithCellsForTps } from "@/lib/patchFilters";
 import { cn } from "@/lib/utils";
 
 export type PatchGalleryVariant = "grid" | "sidebar";
@@ -33,10 +26,7 @@ export function PatchGallery({
   const caseId = useViewerStore((s) => s.caseId);
   const selectedPatchId = useViewerStore((s) => s.selectedPatchId);
   const galleryBucket = useViewerStore((s) => s.galleryBucket);
-  const gallerySort = useViewerStore((s) => s.gallerySort);
   const galleryPage = useViewerStore((s) => s.galleryPage);
-  const setGalleryBucket = useViewerStore((s) => s.setGalleryBucket);
-  const setGallerySort = useViewerStore((s) => s.setGallerySort);
   const setGalleryPage = useViewerStore((s) => s.setGalleryPage);
   const setSelectedPatch = useViewerStore((s) => s.setSelectedPatch);
   const flyToPatch = useViewerStore((s) => s.flyToPatch);
@@ -44,16 +34,10 @@ export function PatchGallery({
   const pageSize =
     variant === "sidebar" ? GALLERY_PAGE_SIZE_SIDEBAR : GALLERY_PAGE_SIZE;
 
-  const stats = computeWsiStats(manifest);
-
-  const filtered: PatchEntry[] = (manifest?.patches ?? []).filter(
-    (p) => p.patchPredBucket === galleryBucket,
-  );
-  const sorted = [...filtered].sort((a, b) =>
-    gallerySort === "desc"
-      ? b.patchPredTps - a.patchPredTps
-      : a.patchPredTps - b.patchPredTps,
-  );
+  const filtered: PatchEntry[] = patchesWithCellsForTps(
+    manifest?.patches ?? [],
+  ).filter((p) => p.patchPredBucket === galleryBucket);
+  const sorted = [...filtered].sort((a, b) => b.patchPredTps - a.patchPredTps);
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const page = Math.min(galleryPage, totalPages - 1);
   const startIdx = page * pageSize;
@@ -80,71 +64,8 @@ export function PatchGallery({
           variant === "sidebar" && "h-full gap-2 px-2.5 py-0",
         )}
       >
-        <div
-          className={cn(
-            "flex items-center justify-between gap-2",
-            variant === "sidebar" && "flex-col items-stretch",
-          )}
-        >
-          <span className={titleClass}>
-            Patch Gallery{" "}
-            {variant === "grid" ? (
-              <span className="font-normal text-muted-foreground">
-                (Sorted by TPS Score)
-              </span>
-            ) : null}
-          </span>
-          <div className="text-app-body flex items-center gap-2 text-muted-foreground">
-            <span className="shrink-0">Sort</span>
-            <Select
-              value={gallerySort}
-              onValueChange={(v) => v && setGallerySort(v as GallerySort)}
-            >
-              <SelectTrigger
-                className={cn(
-                  "text-app-body h-auto min-h-10 py-2",
-                  variant === "sidebar" ? "w-full" : "w-[130px]",
-                )}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="desc">High to Low</SelectItem>
-                <SelectItem value="asc">Low to High</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div
-          className={cn(
-            "flex flex-wrap gap-1",
-            variant === "sidebar" && "gap-1",
-          )}
-        >
-          {BUCKET_ORDER.map((b) => {
-            const style = BUCKET_STYLES[b];
-            const count = stats.bucketCounts[b] ?? 0;
-            const isActive = galleryBucket === b;
-            return (
-              <button
-                key={b}
-                type="button"
-                onClick={() => setGalleryBucket(b)}
-                className={cn(
-                  "text-app-body rounded-md px-2 py-1 font-medium ring-1 transition-colors",
-                  variant === "sidebar" && "min-w-0 flex-1 px-1.5",
-                  isActive
-                    ? cn(style.badgeBg, style.badgeText, style.badgeRing)
-                    : "bg-muted/40 text-muted-foreground ring-border hover:bg-muted/70",
-                )}
-              >
-                <span className="truncate">
-                  {style.label} ({count})
-                </span>
-              </button>
-            );
-          })}
+        <div className="flex items-center justify-between gap-2">
+          <span className={titleClass}>Patch Gallery</span>
         </div>
 
         {sorted.length === 0 ? (
@@ -157,9 +78,7 @@ export function PatchGallery({
               const isActive = p.patchId === selectedPatchId;
               const tpsPct = (p.patchPredTps * 100).toFixed(1);
               const thumbUrl = caseId
-                ? `/api/cases/${encodeURIComponent(caseId)}/file/patches/${encodeURIComponent(
-                    p.patchId,
-                  )}/image.jpg`
+                ? caseFileRelativeUrl(caseId, p.imageFile)
                 : "";
               const bucketStyle = BUCKET_STYLES[p.patchPredBucket];
               const xyLabel = formatPatchOriginXY(p);
@@ -169,48 +88,50 @@ export function PatchGallery({
                   type="button"
                   onClick={() => handlePatchClick(p.patchId)}
                   className={cn(
-                    "flex w-full gap-2 rounded-md border p-1.5 text-left transition-colors",
+                    "flex w-full flex-col gap-0 rounded-md border p-1.5 text-left transition-colors",
                     isActive
                       ? "border-red-500 bg-red-500/10 ring-1 ring-red-500"
                       : "border-border bg-muted/20 hover:bg-muted/45",
                   )}
                   title={`${p.patchId} · ${xyLabel}`}
                 >
-                  <div className="size-10 shrink-0 overflow-hidden rounded bg-muted">
-                    {thumbUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={thumbUrl}
-                        alt=""
-                        className="size-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : null}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div
-                      className={cn(
-                        "font-mono text-app-body leading-tight tabular-nums",
-                        isActive ? "text-red-200" : "text-foreground",
-                      )}
-                    >
-                      {xyLabel}
+                  <div className="flex w-full gap-2">
+                    <div className="size-10 shrink-0 overflow-hidden rounded bg-muted">
+                      {thumbUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={thumbUrl}
+                          alt=""
+                          className="size-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : null}
                     </div>
-                    <div className="text-app-body mt-0.5 text-muted-foreground">
-                      TPS{" "}
-                      <span
+                    <div className="min-w-0 flex-1">
+                      <div
                         className={cn(
-                          "font-mono font-semibold tabular-nums",
-                          isActive ? "text-red-300" : bucketStyle.text,
+                          "font-mono text-app-body leading-tight tabular-nums",
+                          isActive ? "text-red-200" : "text-foreground",
                         )}
                       >
-                        {tpsPct}%
-                      </span>
-                      <span className="mx-1 text-border">·</span>
-                      Cells{" "}
-                      <span className="font-mono tabular-nums text-foreground">
-                        {p.numCells}
-                      </span>
+                        {xyLabel}
+                      </div>
+                      <div className="text-app-body mt-0.5 text-muted-foreground">
+                        TPS{" "}
+                        <span
+                          className={cn(
+                            "font-mono font-semibold tabular-nums",
+                            isActive ? "text-red-300" : bucketStyle.text,
+                          )}
+                        >
+                          {tpsPct}%
+                        </span>
+                        <span className="mx-1 text-border">·</span>
+                        Cells{" "}
+                        <span className="font-mono tabular-nums text-foreground">
+                          {p.numCells}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </button>
@@ -224,9 +145,7 @@ export function PatchGallery({
                 const isActive = p.patchId === selectedPatchId;
                 const tpsPct = (p.patchPredTps * 100).toFixed(1);
                 const thumbUrl = caseId
-                  ? `/api/cases/${encodeURIComponent(caseId)}/file/patches/${encodeURIComponent(
-                      p.patchId,
-                    )}/image.jpg`
+                  ? caseFileRelativeUrl(caseId, p.imageFile)
                   : "";
                 const bucketStyle = BUCKET_STYLES[p.patchPredBucket];
                 return (
