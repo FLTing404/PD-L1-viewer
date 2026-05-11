@@ -7,9 +7,11 @@ import { AiAssistantChatBody } from "./AiAssistantPanel";
 import { cn } from "@/lib/utils";
 
 const FAB_SIZE = 48;
-const PANEL_W = 384;
-const PANEL_H = 520;
+const PANEL_W = 440;
+const PANEL_H = 760;
 const DRAG_THRESHOLD = 5;
+/** Padding from viewport edge when snapping the closed FAB to a corner */
+const FAB_EDGE_MARGIN = 20;
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
@@ -27,6 +29,36 @@ function clampPos(
     x: clamp(x, 0, Math.max(0, vw - elW)),
     y: clamp(y, 0, Math.max(0, vh - elH)),
   };
+}
+
+/** Snap closed FAB center to nearest viewport corner (keeps icon flush to two edges). */
+function snapFabToNearestCorner(
+  x: number,
+  y: number,
+  vw: number,
+  vh: number,
+): Point {
+  const m = FAB_EDGE_MARGIN;
+  const corners: Point[] = [
+    { x: m, y: m },
+    { x: vw - FAB_SIZE - m, y: m },
+    { x: m, y: vh - FAB_SIZE - m },
+    { x: vw - FAB_SIZE - m, y: vh - FAB_SIZE - m },
+  ];
+  const cx = x + FAB_SIZE / 2;
+  const cy = y + FAB_SIZE / 2;
+  let best = corners[0]!;
+  let bestD = Infinity;
+  for (const c of corners) {
+    const mx = c.x + FAB_SIZE / 2;
+    const my = c.y + FAB_SIZE / 2;
+    const d = (cx - mx) ** 2 + (cy - my) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = c;
+    }
+  }
+  return clampPos(best.x, best.y, FAB_SIZE, FAB_SIZE, vw, vh);
 }
 
 type Point = { x: number; y: number };
@@ -54,24 +86,29 @@ export function AiAssistantFloating() {
   fabPosRef.current = fabPos;
   const panelPosRef = useRef(panelPos);
   panelPosRef.current = panelPos;
+  const openRef = useRef(open);
+  openRef.current = open;
 
   useEffect(() => setMounted(true), []);
 
+  /** FAB: clamp; when closed, snap to nearest viewport corner (avoids 0,0 → wrong corner). */
   useLayoutEffect(() => {
-    if (!mounted || typeof window === "undefined") return;
-    setFabPos((p) =>
-      p.x === 0 && p.y === 0
-        ? clampPos(
-            window.innerWidth - FAB_SIZE - 20,
-            window.innerHeight - FAB_SIZE - 20,
-            FAB_SIZE,
-            FAB_SIZE,
-            window.innerWidth,
-            window.innerHeight,
-          )
-        : p,
-    );
-  }, [mounted]);
+    if (!mounted) return;
+    setFabPos((p) => {
+      const c = clampPos(p.x, p.y, FAB_SIZE, FAB_SIZE, vw, vh);
+      if (open) return c;
+      if (p.x === 0 && p.y === 0) {
+        return snapFabToNearestCorner(
+          vw - FAB_SIZE - FAB_EDGE_MARGIN,
+          vh - FAB_SIZE - FAB_EDGE_MARGIN,
+          vw,
+          vh,
+        );
+      }
+      return snapFabToNearestCorner(c.x, c.y, vw, vh);
+    });
+    setPanelPos((p) => clampPos(p.x, p.y, PANEL_W, PANEL_H, vw, vh));
+  }, [mounted, vw, vh, open]);
 
   useLayoutEffect(() => {
     if (!open || panelEverPlaced.current || !mounted) return;
@@ -89,12 +126,6 @@ export function AiAssistantFloating() {
     );
     panelEverPlaced.current = true;
   }, [open, mounted, fabPos.x, fabPos.y, vw, vh]);
-
-  useLayoutEffect(() => {
-    if (!mounted) return;
-    setFabPos((p) => clampPos(p.x, p.y, FAB_SIZE, FAB_SIZE, vw, vh));
-    setPanelPos((p) => clampPos(p.x, p.y, PANEL_W, PANEL_H, vw, vh));
-  }, [mounted, vw, vh]);
 
   const fabDragMoved = useRef(false);
 
@@ -125,6 +156,11 @@ export function AiAssistantFloating() {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
+      if (moved && !openRef.current) {
+        const vw0 = window.innerWidth;
+        const vh0 = window.innerHeight;
+        setFabPos((p) => snapFabToNearestCorner(p.x, p.y, vw0, vh0));
+      }
     };
 
     window.addEventListener("pointermove", onMove);
@@ -208,8 +244,13 @@ export function AiAssistantFloating() {
         <div
           role="dialog"
           aria-label="Pathology Insight"
-          className="pointer-events-auto absolute flex max-h-[min(70vh,560px)] w-[384px] flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xl"
-          style={{ left: panelPos.x, top: panelPos.y, height: PANEL_H }}
+          className="pointer-events-auto absolute flex max-h-[min(85vh,800px)] flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xl"
+          style={{
+            left: panelPos.x,
+            top: panelPos.y,
+            width: PANEL_W,
+            height: PANEL_H,
+          }}
         >
           <div
             className="flex shrink-0 cursor-grab select-none items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 active:cursor-grabbing"

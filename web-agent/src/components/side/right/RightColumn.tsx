@@ -57,7 +57,7 @@ export function RightColumn() {
         />
       </div>
 
-      <div className="flex min-h-0 min-w-0 flex-[2_1_0%] flex-col overflow-y-auto border-t border-[#2d2d2d]">
+      <div className="flex min-h-0 min-w-0 flex-[2_1_0%] flex-col overflow-hidden border-t border-[#2d2d2d]">
         <SelectedPatchDetailCard />
       </div>
     </aside>

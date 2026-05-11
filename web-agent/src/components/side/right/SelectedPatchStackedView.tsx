@@ -16,6 +16,7 @@ import type { PatchEntry } from "@/types/case";
 import { formatPatchOriginXY } from "@/lib/patchDisplay";
 import { patchPreviewFileUrlFromEntry } from "@/lib/patchPreviewUrl";
 import { cn } from "@/lib/utils";
+import { formatTpsPercentDigits } from "@/lib/formatTpsPercent";
 
 interface ZoomState {
   zoom: number;
@@ -57,7 +58,7 @@ function PatchCellStatsInline({ className }: { className?: string }) {
 
   const predTps = patch ? clamp(patch.patchPredTps, 0, 1) : 0;
   const bucketStyle = patch ? BUCKET_STYLES[patch.patchPredBucket] : null;
-  const bucketLabel = bucketStyle?.fullLabel ?? "—";
+  const bucketLabel = bucketStyle?.label ?? "—";
 
   const mixTotal = Math.max(1, stats.positive + stats.negative);
   const mixPosPct = (stats.positive / mixTotal) * 100;
@@ -67,7 +68,7 @@ function PatchCellStatsInline({ className }: { className?: string }) {
     return (
       <div
         className={cn(
-          "flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden py-0.5",
+          "flex min-h-0 flex-1 flex-col gap-2 overflow-hidden overflow-x-hidden py-0.5",
           className,
         )}
       >
@@ -91,21 +92,21 @@ function PatchCellStatsInline({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden overscroll-contain py-0.5 [-webkit-overflow-scrolling:touch]",
+        "flex min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden overflow-x-hidden py-0.5",
         className,
       )}
     >
       {/* Bucket → Total cells → Pred TPS (bar only on Pred TPS) */}
-      <section className="flex shrink-0 flex-col gap-2 rounded-lg border border-border/60 bg-gradient-to-b from-muted/45 to-muted/20 px-2.5 py-2 shadow-sm dark:from-muted/20 dark:to-muted/10">
+      <section className="flex shrink-0 flex-col gap-1.5 rounded-lg border border-border/60 bg-gradient-to-b from-muted/45 to-muted/20 px-2.5 py-1.5 shadow-sm dark:from-muted/20 dark:to-muted/10">
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
             patch_pred_bucket
           </span>
           <div className="flex min-w-0 items-center">
             {patch && bucketStyle ? (
               <span
                 className={cn(
-                  "inline-flex max-w-full truncate rounded px-2 py-0.5 text-[11px] font-semibold leading-tight ring-1",
+                  "inline-flex max-w-full truncate rounded px-2 py-0.5 text-[12px] font-semibold leading-tight ring-1",
                   bucketStyle.badgeBg,
                   bucketStyle.badgeText,
                   bucketStyle.badgeRing,
@@ -119,28 +120,28 @@ function PatchCellStatsInline({ className }: { className?: string }) {
           </div>
         </div>
 
-        <div className="border-t border-border/45 pt-2">
-          <span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+        <div className="border-t border-border/45 pt-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
             Total cells (patch / WSI)
           </span>
           <div className="mt-1 flex flex-wrap items-baseline gap-x-1 gap-y-0 font-mono tabular-nums leading-tight">
-            <span className="text-sm font-semibold text-foreground">
+            <span className="text-[15px] font-semibold leading-none text-foreground">
               {stats.total.toLocaleString()}
             </span>
-            <span className="text-xs text-muted-foreground">/</span>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-[13px] text-muted-foreground">/</span>
+            <span className="text-[13px] text-muted-foreground">
               {wsiDen > 0 ? wsiDen.toLocaleString() : "—"}
             </span>
           </div>
         </div>
 
-        <div className="border-t border-border/45 pt-2">
+        <div className="border-t border-border/45 pt-1.5">
           <div className="flex min-w-0 items-end justify-between gap-2">
-            <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+            <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
               Pred TPS
             </span>
-            <span className="min-w-0 truncate font-mono text-base font-semibold tabular-nums leading-none tracking-tight text-foreground">
-              {patch ? `${predPct.toFixed(2)}%` : "—"}
+            <span className="min-w-0 truncate font-mono text-lg font-semibold tabular-nums leading-none tracking-tight text-foreground">
+              {patch ? `${formatTpsPercentDigits(predTps)}%` : "—"}
             </span>
           </div>
           <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted/60 dark:bg-muted/40">
@@ -153,12 +154,12 @@ function PatchCellStatsInline({ className }: { className?: string }) {
       </section>
 
       {/* Cell mix */}
-      <section className="flex shrink-0 flex-col gap-1.5 rounded-lg border border-border/50 bg-card/80 px-2.5 py-2 dark:bg-card/50">
+      <section className="flex shrink-0 flex-col gap-1 rounded-lg border border-border/50 bg-card/80 px-2.5 py-1.5 dark:bg-card/50">
         <div className="flex min-w-0 items-baseline justify-between gap-1">
-          <span className="min-w-0 shrink text-[9px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          <span className="min-w-0 shrink text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
             Cell mix (+ / −)
           </span>
-          <span className="shrink-0 font-mono text-[10px] tabular-nums leading-tight text-foreground sm:text-[11px]">
+          <span className="shrink-0 font-mono text-[12px] tabular-nums leading-tight text-foreground sm:text-[13px]">
             <span className="text-[#b85a5a] dark:text-red-300/90">
               +{stats.positive.toLocaleString()}
             </span>
@@ -428,10 +429,10 @@ export function SelectedPatchDetailCard() {
           <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden">
             <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border/45 pb-1.5">
               <div className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   Selected patch
                 </span>
-                <span className="font-mono text-[11px] tabular-nums leading-snug text-muted-foreground">
+                <span className="font-mono text-[13px] tabular-nums leading-snug text-muted-foreground">
                   {formatPatchOriginXY(patch)}
                 </span>
               </div>

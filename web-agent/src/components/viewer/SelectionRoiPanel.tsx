@@ -8,6 +8,7 @@ import { patchesIntersectingRect } from "@/lib/localRoiStats";
 import type { PatchEntry } from "@/types/case";
 import { CellMixStackedBar, MetricHBar } from "@/components/charts/MetricBars";
 import { cn } from "@/lib/utils";
+import { formatTpsPercentDigits } from "@/lib/formatTpsPercent";
 
 function cellWeightedMeanTps(patches: PatchEntry[]): number {
   const withCells = patchesWithCellsForTps(patches);
@@ -87,10 +88,10 @@ export function SelectionRoiPanel({
     >
       <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border/45 pb-1.5">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Selection ROI
           </span>
-          <span className="text-[11px] font-medium leading-snug text-muted-foreground/75">
+          <span className="text-[13px] font-medium leading-snug text-muted-foreground/75">
             {subtitle}
           </span>
         </div>
@@ -106,12 +107,12 @@ export function SelectionRoiPanel({
         ) : null}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col justify-center gap-5 py-3">
+      <div className="flex min-h-0 flex-1 flex-col justify-center gap-3 py-2">
         <MetricHBar
           variant="card"
           label="Mean TPS (scalar)"
           fraction={Math.min(1, Math.max(0, meanTps))}
-          valueLabel={`${(meanTps * 100).toFixed(1)}%`}
+          valueLabel={`${formatTpsPercentDigits(meanTps)}%`}
           barClassName="bg-sky-600/75"
         />
         <MetricHBar

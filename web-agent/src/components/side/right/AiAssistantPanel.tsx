@@ -9,12 +9,9 @@ import {
   type ChatMessage,
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { PREDEFINED_QUESTIONS } from "@/lib/agent/predefinedQuestions";
 
-const SUGGESTIONS = [
-  "Summarize the TPS distribution of this WSI.",
-  "Explain the selected patch and its cell evidence.",
-  "Given this TPS, what PD-L1 therapy options are typically considered?",
-];
+type GuidedQuestion = { id: string; label: string };
 
 function makeId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -106,6 +103,7 @@ export function AiAssistantChatBody({
   const caseId = useViewerStore((s) => s.caseId);
   const selectedPatchId = useViewerStore((s) => s.selectedPatchId);
   const threshold = useViewerStore((s) => s.threshold);
+  const localRoi = useViewerStore((s) => s.localRoi);
   const messages = useViewerStore((s) => s.chatMessages);
   const status = useViewerStore((s) => s.chatStatus);
   const error = useViewerStore((s) => s.chatError);
@@ -115,14 +113,127 @@ export function AiAssistantChatBody({
   const reset = useViewerStore((s) => s.resetChat);
 
   const [input, setInput] = useState("");
+  const [guidedQuestions, setGuidedQuestions] = useState<GuidedQuestion[]>(() =>
+    PREDEFINED_QUESTIONS.map(({ id, label }) => ({ id, label })),
+  );
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/chat");
+        if (!res.ok) return;
+        const data = (await res.json()) as { questions?: GuidedQuestion[] };
+        if (!cancelled && Array.isArray(data.questions)) {
+          setGuidedQuestions(data.questions);
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  const sendGuided = useCallback(
+    async (questionId: string, label: string) => {
+      if (status === "streaming") return;
+      if (!caseId) {
+        append({
+          id: makeId("u"),
+          role: "user",
+          content: label,
+        });
+        append({
+          id: makeId("a"),
+          role: "assistant",
+          content:
+            "**Note:** Load a case first — quick answers need the case manifest.",
+        });
+        return;
+      }
+
+      const userMsg: ChatMessage = {
+        id: makeId("u"),
+        role: "user",
+        content: label,
+      };
+      const aiMsgId = makeId("a");
+      const aiMsg: ChatMessage = {
+        id: aiMsgId,
+        role: "assistant",
+        content: "",
+      };
+
+      append(userMsg);
+      append(aiMsg);
+      setStatus("streaming");
+
+      const ac = new AbortController();
+      abortRef.current = ac;
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "guided",
+            questionId,
+            caseId,
+            selectedPatchId,
+            threshold,
+            roiWorld: localRoi?.world ?? null,
+          }),
+          signal: ac.signal,
+        });
+        const rawText = await res.text();
+        if (!res.ok) {
+          let msg = `Request failed (${res.status})`;
+          try {
+            const parsed = JSON.parse(rawText) as { message?: string };
+            if (parsed.message) msg = parsed.message;
+          } catch {
+            /* ignore */
+          }
+          update(aiMsgId, `**Error**: ${msg}`);
+          setStatus("error", msg);
+          return;
+        }
+        const data = JSON.parse(rawText) as { content?: string };
+        update(aiMsgId, data.content ?? "_(empty response)_");
+        setStatus("idle");
+      } catch (err) {
+        const aborted = (err as { name?: string }).name === "AbortError";
+        if (aborted) {
+          setStatus("idle");
+        } else {
+          update(aiMsgId, `**Error**: ${String(err)}`);
+          setStatus("error", String(err));
+        }
+      } finally {
+        abortRef.current = null;
+      }
+    },
+    [
+      append,
+      update,
+      setStatus,
+      caseId,
+      selectedPatchId,
+      threshold,
+      localRoi,
+      status,
+    ],
+  );
 
   const send = useCallback(
     async (raw: string) => {
@@ -153,6 +264,7 @@ export function AiAssistantChatBody({
         caseId,
         selectedPatchId,
         threshold,
+        roiWorld: localRoi?.world ?? null,
         messages: [...messages, userMsg].map((m) => ({
           role: m.role,
           content: m.content,
@@ -225,6 +337,7 @@ export function AiAssistantChatBody({
       caseId,
       selectedPatchId,
       threshold,
+      localRoi,
       messages,
       status,
     ],
@@ -315,23 +428,21 @@ export function AiAssistantChatBody({
                   <Bot className="size-3.5" />
                 </div>
                 <p className="leading-relaxed">
-                  Hello! I&apos;m Pathology Insight. I can help you analyze TPS
-                  scores, cell counts, patch patterns, and discuss general PD-L1
-                  therapy considerations grounded in the current case data.
+                  Hello. I&apos;m your TPS-Vis assistant—I can help you navigate the slide, summarize ROIs, or pull patch- and cell-level stats from the pipeline. Which case should we look at?
                 </p>
               </div>
               <div className="space-y-1.5">
                 <span className="text-[12px] uppercase tracking-wider text-muted-foreground">
-                  Try asking
+                  Quick prompts
                 </span>
-                {SUGGESTIONS.map((s) => (
+                {guidedQuestions.map((q) => (
                   <button
-                    key={s}
+                    key={q.id}
                     type="button"
-                    onClick={() => void send(s)}
+                    onClick={() => void sendGuided(q.id, q.label)}
                     className="block w-full rounded-md bg-muted/40 px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   >
-                    {s}
+                    {q.label}
                   </button>
                 ))}
               </div>

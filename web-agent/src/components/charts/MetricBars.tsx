@@ -34,7 +34,7 @@ export function MetricInlinePair({
       className={cn(
         "flex items-baseline justify-between gap-2",
         variant === "card"
-          ? "text-[9px] font-semibold uppercase tracking-[0.1em]"
+          ? "text-[11px] font-semibold uppercase tracking-[0.1em]"
           : "text-[10px]",
         vs.label,
       )}
@@ -43,7 +43,7 @@ export function MetricInlinePair({
       <span
         className={cn(
           "shrink-0 font-mono tabular-nums font-semibold",
-          variant === "card" ? "text-[11px]" : "text-xs",
+          variant === "card" ? "text-[13px]" : "text-xs",
           vs.value,
         )}
       >
@@ -75,7 +75,7 @@ export function MetricHBar({
         className={cn(
           "flex items-baseline justify-between gap-2",
           variant === "card"
-            ? "text-[9px] font-semibold uppercase tracking-[0.1em]"
+            ? "text-[11px] font-semibold uppercase tracking-[0.1em]"
             : "text-[10px]",
           vs.label,
         )}
@@ -84,7 +84,7 @@ export function MetricHBar({
         <span
           className={cn(
             "shrink-0 font-mono tabular-nums font-semibold",
-            variant === "card" ? "text-[11px]" : "text-xs",
+            variant === "card" ? "text-[13px]" : "text-xs",
             vs.value,
           )}
         >
@@ -129,7 +129,7 @@ export function CellMixStackedBar({
         className={cn(
           "flex items-baseline justify-between gap-2",
           variant === "card"
-            ? "text-[9px] font-semibold uppercase tracking-[0.1em]"
+            ? "text-[11px] font-semibold uppercase tracking-[0.1em]"
             : "text-[10px]",
           vs.label,
         )}
@@ -138,7 +138,7 @@ export function CellMixStackedBar({
         <span
           className={cn(
             "shrink-0 font-mono tabular-nums font-semibold leading-tight",
-            variant === "card" ? "text-[10px] sm:text-[11px]" : "text-xs",
+            variant === "card" ? "text-[12px] sm:text-[13px]" : "text-xs",
             vs.value,
           )}
         >

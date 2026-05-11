@@ -16,6 +16,7 @@ import type { PatchEntry } from "@/types/case";
 import { patchesWithCellsForTps } from "@/lib/patchFilters";
 import { patchesIntersectingRect } from "@/lib/localRoiStats";
 import { cn } from "@/lib/utils";
+import { formatTpsPercentDigits } from "@/lib/formatTpsPercent";
 
 export type PatchGalleryVariant = "grid" | "sidebar";
 
@@ -104,7 +105,7 @@ export function PatchGallery({
           <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overflow-x-hidden pr-0.5">
             {pageItems.map((p) => {
               const isActive = p.patchId === selectedPatchId;
-              const tpsPct = (p.patchPredTps * 100).toFixed(1);
+              const tpsPct = formatTpsPercentDigits(p.patchPredTps);
               const thumbUrl = caseId
                 ? caseFileRelativeUrl(caseId, p.imageFile)
                 : "";
@@ -171,7 +172,7 @@ export function PatchGallery({
             <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10">
               {pageItems.map((p) => {
                 const isActive = p.patchId === selectedPatchId;
-                const tpsPct = (p.patchPredTps * 100).toFixed(1);
+                const tpsPct = formatTpsPercentDigits(p.patchPredTps);
                 const thumbUrl = caseId
                   ? caseFileRelativeUrl(caseId, p.imageFile)
                   : "";

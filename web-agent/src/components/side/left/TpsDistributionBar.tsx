@@ -19,9 +19,13 @@ import { BUCKET_STYLES, type BucketStyle } from "@/lib/bucket";
 import type { PatchBucket } from "@/types/case";
 import { patchesIntersectingRect } from "@/lib/localRoiStats";
 import {
+  aggregateFineBinsByTpsEdges,
+  blendBucketCounts,
+  blendTpsAxes,
+  buildEqualPixelHistogramPlan,
   buildTpsPercentBins,
   countPatchesByBucket,
-  createLinearTpsAxis,
+  createProportionalTpsAxis,
   maxBin,
   sumBins,
   TPS_HISTOGRAM_BIN_COUNT,
@@ -34,6 +38,12 @@ import { SelectionRoiPanel } from "@/components/viewer/SelectionRoiPanel";
 /** ROI bars: tallest bin uses this fraction of plot height (Y scale = maxBin / ratio). */
 const ROI_FILL_RATIO = 0.8;
 
+/** Whole-slide histogram: tallest bar fills at most this fraction of plot height. */
+const WS_FILL_RATIO = 0.9;
+
+/** Equal-pixel histogram: min CSS px per bar (↑ fewer, wider columns). */
+const HISTOGRAM_MIN_BAR_PX = 6;
+
 /** Dark chart strata — same hue families as `BUCKET_STYLES` for coherent proportion bands. */
 const BAND_SURFACE: Record<PatchBucket, string> = {
   Negative: "#152c48",
@@ -44,28 +54,54 @@ const BAND_SURFACE: Record<PatchBucket, string> = {
 
 const BAND_BUCKETS: PatchBucket[] = ["Negative", "TPS_1", "TPS_10", "TPS_50"];
 
+const EMPTY_BUCKET_COUNTS: Record<PatchBucket, number> = {
+  Negative: 0,
+  TPS_1: 0,
+  TPS_10: 0,
+  TPS_50: 0,
+};
+
+function cloneBucketCounts(
+  c: Record<PatchBucket, number>,
+): Record<PatchBucket, number> {
+  return {
+    Negative: c.Negative,
+    TPS_1: c.TPS_1,
+    TPS_10: c.TPS_10,
+    TPS_50: c.TPS_50,
+  };
+}
+
+function bucketCountsEqual(
+  a: Record<PatchBucket, number>,
+  b: Record<PatchBucket, number>,
+): boolean {
+  return BAND_BUCKETS.every((k) => a[k] === b[k]);
+}
+
 const ROI_FILL = "#22d3ee";
 const ROI_STROKE = "rgba(224,242,254,0.85)";
 
-function drawRoiBars(
+const X_BOUNDARY_TICKS = [1, 10, 50, 100] as const;
+
+/** Equal-pixel-width bars; counts already aggregated to match `plan.tpsEdges`. */
+function drawEqualPixelHistogramBars(
   ctx: CanvasRenderingContext2D,
-  roiCounts: number[],
+  aggCounts: number[],
   yAxisMax: number,
-  mapTpsToX: (tps: number) => number,
+  px0: number,
+  wBar: number,
   py1: number,
   plotH: number,
 ): void {
   const denom = Math.max(1e-6, yAxisMax);
+  const gapTrim = Math.min(0.06, Math.max(0.02, wBar * 0.12));
   ctx.beginPath();
-  for (let k = 0; k < TPS_HISTOGRAM_BIN_COUNT; k++) {
-    const c = roiCounts[k]!;
+  for (let i = 0; i < aggCounts.length; i++) {
+    const c = aggCounts[i]!;
     if (c <= 0) continue;
-    let x0 = mapTpsToX(k);
-    let x1 = mapTpsToX(Math.min(100, k + 1));
-    if (x1 < x0) [x0, x1] = [x1, x0];
-    const gapTrim = 0.08;
-    x0 += gapTrim;
-    x1 -= gapTrim;
+    let x0 = px0 + i * wBar + gapTrim;
+    let x1 = px0 + (i + 1) * wBar - gapTrim;
     if (x1 <= x0) x1 = x0 + 0.12;
     const hRaw = (c / denom) * plotH;
     const h = Math.min(plotH, hRaw);
@@ -220,6 +256,13 @@ export function TpsDistributionBar() {
     [tpsPatches],
   );
 
+  const roiPatchesInRect = useMemo(() => {
+    if (!manifest || !localRoi) return null;
+    return patchesWithCellsForTps(
+      patchesIntersectingRect(manifest, localRoi.world),
+    );
+  }, [manifest, localRoi]);
+
   const roiCounts = useMemo(() => {
     if (!manifest || !localRoi) return null;
     const patches = patchesWithCellsForTps(
@@ -238,6 +281,97 @@ export function TpsDistributionBar() {
         ? `${localRoi.world.x},${localRoi.world.y},${localRoi.world.w},${localRoi.world.h}`
         : "",
     [localRoi],
+  );
+
+  /** Histogram + allocation strip always use proportional bands; ROI uses in-ROI bucket counts. */
+  const targetBucketCounts = useMemo(() => {
+    if (roiBarsOnly && roiPatchesInRect && roiPatchesInRect.length > 0) {
+      return countPatchesByBucket(roiPatchesInRect);
+    }
+    return bucketCounts ?? EMPTY_BUCKET_COUNTS;
+  }, [roiBarsOnly, roiPatchesInRect, bucketCounts]);
+
+  const distTargetKey = useMemo(
+    () =>
+      `${manifest?.caseId ?? ""}|${roiBarsOnly ? roiAnimKey || "roi" : "ws"}|${BAND_BUCKETS.map((b) => targetBucketCounts[b]).join(",")}`,
+    [manifest?.caseId, roiBarsOnly, roiAnimKey, targetBucketCounts],
+  );
+
+  const stableBucketCountsRef = useRef<Record<PatchBucket, number>>(
+    EMPTY_BUCKET_COUNTS,
+  );
+
+  const [axisDistBlend, setAxisDistBlend] = useState<{
+    from: Record<PatchBucket, number>;
+    to: Record<PatchBucket, number>;
+    t: number;
+  }>(() => ({
+    from: EMPTY_BUCKET_COUNTS,
+    to: EMPTY_BUCKET_COUNTS,
+    t: 1,
+  }));
+
+  useLayoutEffect(() => {
+    if (!manifest) return;
+    const end = cloneBucketCounts(targetBucketCounts);
+    stableBucketCountsRef.current = end;
+    setAxisDistBlend({ from: end, to: end, t: 1 });
+  }, [manifest?.caseId]);
+
+  useEffect(() => {
+    if (!manifest) return;
+    const end = cloneBucketCounts(targetBucketCounts);
+    const start = stableBucketCountsRef.current;
+    if (bucketCountsEqual(start, end)) {
+      setAxisDistBlend({ from: end, to: end, t: 1 });
+      return;
+    }
+    let cancelled = false;
+    const from = cloneBucketCounts(start);
+    const to = end;
+    const t0 = performance.now();
+    const duration = 420;
+    const tick = (now: number) => {
+      if (cancelled) return;
+      const u = Math.min(1, (now - t0) / duration);
+      const ease = 1 - (1 - u) ** 3;
+      setAxisDistBlend({ from, to, t: ease });
+      if (u < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        stableBucketCountsRef.current = cloneBucketCounts(to);
+        const settled = cloneBucketCounts(to);
+        setAxisDistBlend({ from: settled, to: settled, t: 1 });
+      }
+    };
+    requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+    };
+  }, [distTargetKey, manifest]);
+
+  const chartAxis = useMemo(
+    () =>
+      blendTpsAxes(
+        createProportionalTpsAxis(axisDistBlend.from, geom.PX0, geom.PLOT_W),
+        createProportionalTpsAxis(axisDistBlend.to, geom.PX0, geom.PLOT_W),
+        axisDistBlend.t,
+      ),
+    [axisDistBlend, geom.PX0, geom.PLOT_W],
+  );
+
+  const equalPixelBarPlan = useMemo(
+    () =>
+      buildEqualPixelHistogramPlan(chartAxis.bandWidths, geom.PX0, geom.PLOT_W, {
+        minBarPx: HISTOGRAM_MIN_BAR_PX,
+      }),
+    [chartAxis.bandWidths, geom.PX0, geom.PLOT_W],
+  );
+
+  const aggAllCounts = useMemo(
+    () =>
+      aggregateFineBinsByTpsEdges(allCounts, equalPixelBarPlan.tpsEdges),
+    [allCounts, equalPixelBarPlan.tpsEdges],
   );
 
   const [displayRoiCounts, setDisplayRoiCounts] = useState<number[] | null>(
@@ -278,14 +412,27 @@ export function TpsDistributionBar() {
     return () => cancelAnimationFrame(animRef.current);
   }, [roiAnimKey, roiCounts, roiSum]);
 
-  const yMaxAll = useMemo(() => maxBin(allCounts), [allCounts]);
+  const aggRoiCounts = useMemo(() => {
+    if (!roiCounts || roiSum === 0) return null;
+    const fine = displayRoiCounts ?? roiCounts;
+    return aggregateFineBinsByTpsEdges(fine, equalPixelBarPlan.tpsEdges);
+  }, [
+    roiCounts,
+    roiSum,
+    displayRoiCounts,
+    equalPixelBarPlan.tpsEdges,
+  ]);
+
+  const yMaxAll = useMemo(() => maxBin(aggAllCounts), [aggAllCounts]);
   const yMaxRoi = useMemo(() => {
-    if (!roiCounts || roiSum === 0) return 1;
-    return Math.max(1, maxBin(roiCounts));
-  }, [roiCounts, roiSum]);
+    if (!aggRoiCounts || roiSum === 0) return 1;
+    return Math.max(1, maxBin(aggRoiCounts));
+  }, [aggRoiCounts, roiSum]);
 
   const yScaleTarget = useMemo(() => {
-    if (!hasRoi || roiSum === 0) return Math.max(1, yMaxAll);
+    if (!hasRoi || roiSum === 0) {
+      return Math.max(1, yMaxAll / WS_FILL_RATIO);
+    }
     return Math.max(1, yMaxRoi / ROI_FILL_RATIO);
   }, [hasRoi, roiSum, yMaxAll, yMaxRoi]);
 
@@ -323,59 +470,52 @@ export function TpsDistributionBar() {
     return () => cancelAnimationFrame(yScaleAnimRef.current);
   }, [yScaleTarget]);
 
-  const linearAxis = useMemo(() => {
-    if (!manifest) return null;
-    return createLinearTpsAxis(geom.PX0, geom.PLOT_W);
-  }, [manifest, geom.PX0, geom.PLOT_W]);
-
-  /** Whole-slide and ROI share the same linear 0–100% x mapping; used only for ROI bar fade-in. */
-  const [axisBlend, setAxisBlend] = useState(0);
-  const axisBlendRef = useRef(0);
-  const axisBlendAnimRef = useRef(0);
-
-  useLayoutEffect(() => {
-    axisBlendRef.current = axisBlend;
-  }, [axisBlend]);
-
-  useEffect(() => {
-    const target = roiBarsOnly ? 1 : 0;
-    const start = axisBlendRef.current;
-    if (Math.abs(target - start) < 1e-4) {
-      setAxisBlend(target);
-      return;
-    }
-    cancelAnimationFrame(axisBlendAnimRef.current);
-    const t0 = performance.now();
-    const duration = 420;
-    const tick = (now: number) => {
-      const u = Math.min(1, (now - t0) / duration);
-      const ease = 1 - (1 - u) ** 3;
-      const next = start + (target - start) * ease;
-      setAxisBlend(next);
-      axisBlendRef.current = next;
-      if (u < 1) {
-        axisBlendAnimRef.current = requestAnimationFrame(tick);
-      }
-    };
-    axisBlendAnimRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(axisBlendAnimRef.current);
-  }, [roiBarsOnly]);
-
-  const chartAxis = useMemo(
-    () => linearAxis ?? createLinearTpsAxis(geom.PX0, geom.PLOT_W),
-    [linearAxis, geom.PX0, geom.PLOT_W],
+  const stripCounts = useMemo(
+    () =>
+      blendBucketCounts(axisDistBlend.from, axisDistBlend.to, axisDistBlend.t),
+    [axisDistBlend],
   );
 
-  /** Omit 0%: too close to 1% label on narrow layouts. */
-  const xBoundaryLabels = [1, 10, 50, 100] as const;
-  const minorTicks = useMemo(() => {
-    const skip = new Set([10, 50]);
+  const stripPatchTotal = useMemo(() => {
+    const fromSum = BAND_BUCKETS.reduce((s, b) => s + axisDistBlend.from[b], 0);
+    const toSum = BAND_BUCKETS.reduce((s, b) => s + axisDistBlend.to[b], 0);
+    return Math.round(
+      (1 - axisDistBlend.t) * fromSum + axisDistBlend.t * toSum,
+    );
+  }, [axisDistBlend]);
+
+  /** Align tick visibility with stripCounts / clinical buckets (hide ticks when an interval is empty). */
+  const xTickVisibility = useMemo(() => {
+    const n = stripCounts.Negative > 1e-6;
+    const t1 = stripCounts.TPS_1 > 1e-6;
+    const t10 = stripCounts.TPS_10 > 1e-6;
+    const t50 = stripCounts.TPS_50 > 1e-6;
+    return {
+      show0: n,
+      show1: n || t1,
+      show10: t1 || t10,
+      show50: t10 || t50,
+      show100: t50,
+    };
+  }, [stripCounts]);
+
+  const filteredMinorTicks = useMemo(() => {
+    const t1 = stripCounts.TPS_1 > 1e-6;
+    const t10 = stripCounts.TPS_10 > 1e-6;
+    const t50 = stripCounts.TPS_50 > 1e-6;
+    const skipBoundary = new Set([10, 50]);
     const out: number[] = [];
     for (let v = 10; v <= 90; v += 10) {
-      if (!skip.has(v)) out.push(v);
+      if (skipBoundary.has(v)) continue;
+      if (v < 50) {
+        if (!(t1 || t10)) continue;
+      } else {
+        if (!(t10 || t50)) continue;
+      }
+      out.push(v);
     }
     return out;
-  }, []);
+  }, [stripCounts]);
 
   const curveScale = Math.max(1e-6, displayYScale);
   const yTickVals = yTicks(Math.max(1, Math.ceil(curveScale)));
@@ -397,7 +537,7 @@ export function TpsDistributionBar() {
   );
 
   useEffect(() => {
-    if (!manifest || !linearAxis) return;
+    if (!manifest) return;
     const canvas = chartCanvasRef.current;
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
@@ -426,7 +566,7 @@ export function TpsDistributionBar() {
     ctx.strokeStyle = "rgba(255,255,255,0.25)";
     ctx.lineWidth = 0.35;
     ctx.setLineDash([2, 3]);
-    for (const t of minorTicks) {
+    for (const t of filteredMinorTicks) {
       const x = mapTpsToX(t);
       ctx.beginPath();
       ctx.moveTo(x, PY0);
@@ -435,7 +575,16 @@ export function TpsDistributionBar() {
     }
     ctx.setLineDash([]);
 
-    for (const t of xBoundaryLabels) {
+    for (const t of X_BOUNDARY_TICKS) {
+      const show =
+        t === 1
+          ? xTickVisibility.show1
+          : t === 10
+            ? xTickVisibility.show10
+            : t === 50
+              ? xTickVisibility.show50
+              : xTickVisibility.show100;
+      if (!show) continue;
       const x = mapTpsToX(t);
       const strong = t === 1 || t === 10 || t === 50;
       ctx.strokeStyle = strong ? "rgba(56,189,248,0.55)" : "rgba(255,255,255,0.4)";
@@ -474,34 +623,60 @@ export function TpsDistributionBar() {
     ctx.lineTo(PX0, PY1);
     ctx.stroke();
 
-    /** Whole-slide: 1% bin bars only (no smoothed density curve). */
+    /** Whole-slide: equal-pixel bars; TPS precision from sensitivity × proportional bandwidth. */
     if (!roiBarsOnly) {
       ctx.save();
       ctx.fillStyle = "rgba(56,189,248,0.58)";
       ctx.strokeStyle = "rgba(125,211,252,0.42)";
       ctx.lineWidth = 0.35;
-      drawRoiBars(ctx, allCounts, curveScale, mapTpsToX, PY1, PLOT_H);
-      ctx.restore();
-    }
-
-    if (roiBarsOnly && roiCounts) {
-      ctx.save();
-      ctx.globalAlpha = axisBlend;
-      ctx.fillStyle = "rgba(34,211,238,0.78)";
-      ctx.strokeStyle = ROI_STROKE;
-      ctx.lineWidth = 0.45;
-      drawRoiBars(
+      drawEqualPixelHistogramBars(
         ctx,
-        displayRoiCounts ?? roiCounts,
+        aggAllCounts,
         curveScale,
-        mapTpsToX,
+        PX0,
+        equalPixelBarPlan.wBar,
         PY1,
         PLOT_H,
       );
       ctx.restore();
     }
 
-    for (const t of xBoundaryLabels) {
+    if (roiBarsOnly && roiCounts && aggRoiCounts) {
+      ctx.save();
+      ctx.fillStyle = "rgba(34,211,238,0.78)";
+      ctx.strokeStyle = ROI_STROKE;
+      ctx.lineWidth = 0.45;
+      drawEqualPixelHistogramBars(
+        ctx,
+        aggRoiCounts,
+        curveScale,
+        PX0,
+        equalPixelBarPlan.wBar,
+        PY1,
+        PLOT_H,
+      );
+      ctx.restore();
+    }
+
+    if (xTickVisibility.show0) {
+      const xLabel0 = mapTpsToX(0);
+      ctx.fillStyle = "rgba(160,170,185,0.95)";
+      ctx.font = "400 9px sans-serif";
+      ctx.textBaseline = "bottom";
+      ctx.textAlign = "left";
+      ctx.fillText("0%", Math.min(xLabel0 + 2, PX1 - 28), vbH - 4);
+    }
+
+    for (const t of X_BOUNDARY_TICKS) {
+      const show =
+        t === 1
+          ? xTickVisibility.show1
+          : t === 10
+            ? xTickVisibility.show10
+            : t === 50
+              ? xTickVisibility.show50
+              : xTickVisibility.show100;
+      if (!show) continue;
       const x = mapTpsToX(t);
       const strong = t === 1 || t === 10 || t === 50;
       ctx.fillStyle = strong ? "rgba(125,211,252,0.95)" : "rgba(160,170,185,0.95)";
@@ -517,21 +692,23 @@ export function TpsDistributionBar() {
     PX1,
     PY0,
     PY1,
-    allCounts,
+    aggAllCounts,
+    aggRoiCounts,
+    equalPixelBarPlan.wBar,
     bandLayouts,
     curveScale,
-    axisBlend,
+    axisDistBlend,
+    chartAxis,
     displayRoiCounts,
     hasRoi,
     mapTpsToX,
-    minorTicks,
-    linearAxis,
+    filteredMinorTicks,
+    xTickVisibility,
     roiBarsOnly,
     roiCounts,
     roiSum,
     vbH,
     vbW,
-    xBoundaryLabels,
     yTickVals,
     manifest,
   ]);
@@ -564,8 +741,11 @@ export function TpsDistributionBar() {
                 sideOffset={6}
                 className="max-w-none whitespace-nowrap text-[11px]"
               >
-                Linear 0–100% TPS% axis (equal width per percent). Whole-slide: 1% bin bars.
-                With ROI and patches inside: ROI bars (tallest ~80% height); Y = bin counts
+                X-axis band widths match TPS Allocation Band (bucket counts): whole slide uses
+                all patches; with ROI they match the selection. Histogram bars use equal pixel
+                width; each bar’s TPS span follows clinical sensitivity × band pixel budget (fine
+                0.1% bins aggregated). Y = counts (whole slide tallest ~90%; ROI tallest ~80%).
+                Bucket-empty spans hide the matching boundary ticks.
               </TooltipContent>
             </Tooltip>
           </div>
@@ -611,6 +791,11 @@ export function TpsDistributionBar() {
             <div className="shrink-0">
               <HilbertSpatialStrip
                 manifest={manifest}
+                leftPad={geom.ML}
+                rightPad={geom.MR}
+                distributionCounts={stripCounts}
+                patchTotalDisplay={stripPatchTotal}
+                scope={roiBarsOnly ? "roi_selection" : "whole_slide"}
                 densityTraceLegend={{
                   mode: roiBarsOnly ? "roi_bars" : "ws",
                   wsAsReference: Boolean(hasRoi && !roiBarsOnly),
@@ -622,7 +807,7 @@ export function TpsDistributionBar() {
           <div className="flex min-h-0 w-full shrink-0 flex-col border-border/45 pt-3 lg:max-w-[21%] lg:min-h-0 lg:flex-[7] lg:min-w-[140px] lg:border-l lg:border-t-0 lg:pt-0 lg:pl-3 border-t">
             <SelectionRoiPanel
               variant="embedded"
-              className="min-h-0 flex-1 overflow-y-auto"
+              className="min-h-0 flex-1 overflow-hidden"
             />
           </div>
         </div>

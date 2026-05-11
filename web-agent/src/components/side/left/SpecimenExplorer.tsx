@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useViewerStore } from "@/lib/store";
 import { caseFileRelativeUrl } from "@/lib/patchPreviewUrl";
 import { cn } from "@/lib/utils";
+import { formatTpsPercentDigits } from "@/lib/formatTpsPercent";
 
 function specimenStatusLabel(meanTps: number): string {
   if (meanTps >= 0.5) return "High PD-L1";
@@ -78,7 +79,7 @@ export function SpecimenExplorer({ className }: { className?: string }) {
           casesByTpsDesc.map((c) => {
             const selected = c.caseId === caseId;
             const thumbUrl = caseFileRelativeUrl(c.caseId, c.thumbnailRelative);
-            const tpsPct = (c.meanPatchTps * 100).toFixed(1);
+            const tpsPct = formatTpsPercentDigits(c.meanPatchTps);
             const status = specimenStatusLabel(c.meanPatchTps);
             return (
               <button
