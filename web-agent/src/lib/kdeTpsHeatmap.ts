@@ -81,14 +81,15 @@ export function buildKdeTpsHeatmapCanvas(manifest: CaseManifest): HTMLCanvasElem
   }
 
   const aspect = th / tw;
+  /** Finer grid preserves patch-scale structure before upscale (was capped lower + heavy blur). */
   const gw = Math.min(
-    448,
+    512,
     Math.max(
-      120,
-      Math.round(tw / Math.max(4, Math.sqrt(patches.length) * 0.35)),
+      140,
+      Math.round(tw / Math.max(4, Math.sqrt(patches.length) * 0.28)),
     ),
   );
-  const gh = Math.max(80, Math.round(gw * aspect));
+  const gh = Math.max(96, Math.round(gw * aspect));
 
   const centers = patches.map((p) => ({
     cx: (p.px + p.width / 2) * meta.thumbScaleX,
@@ -97,9 +98,11 @@ export function buildKdeTpsHeatmapCanvas(manifest: CaseManifest): HTMLCanvasElem
   }));
 
   const n = centers.length;
+  const span = Math.max(tw, th);
+  /** Narrower Gaussian kernels (smaller σ) → less “soup”; coeff was 0.42, clamps were wide. */
   const sigma =
-    Math.max(tw, th) *
-    Math.max(0.025, Math.min(0.11, 0.42 / Math.sqrt(Math.max(n, 1))));
+    span *
+    Math.max(0.012, Math.min(0.052, 0.18 / Math.sqrt(Math.max(n, 1))));
   const denom = 2 * sigma * sigma;
 
   const buf = new Float32Array(gw * gh);
@@ -117,8 +120,10 @@ export function buildKdeTpsHeatmapCanvas(manifest: CaseManifest): HTMLCanvasElem
     }
   }
 
+  /** Minimal post-blur (radius 1) — barely smooths speckle without smearing hotspots. */
+  const blurRadius = n >= 2 ? 1 : 0;
   const blurred =
-    n >= 2 ? boxBlur2D(buf, gw, gh, Math.max(1, Math.round(gw / 96))) : buf;
+    blurRadius >= 1 ? boxBlur2D(buf, gw, gh, blurRadius) : buf;
 
   let mx = 0;
   for (let i = 0; i < blurred.length; i++) {
@@ -164,8 +169,9 @@ export function buildKdeTpsHeatmapCanvas(manifest: CaseManifest): HTMLCanvasElem
   canvas.height = outH;
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
+  /** Bilinear upscale alone softens edges; “medium” reduces mush vs “high”. */
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
+  ctx.imageSmoothingQuality = "medium";
   ctx.drawImage(small, 0, 0, outW, outH);
 
   return canvas;

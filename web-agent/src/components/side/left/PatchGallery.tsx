@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { formatPatchOriginXY } from "@/lib/patchDisplay";
 import { caseFileRelativeUrl } from "@/lib/patchPreviewUrl";
 import type { PatchEntry } from "@/types/case";
 import { patchesWithCellsForTps } from "@/lib/patchFilters";
+import { patchesIntersectingRect } from "@/lib/localRoiStats";
 import { cn } from "@/lib/utils";
 
 export type PatchGalleryVariant = "grid" | "sidebar";
@@ -28,15 +30,34 @@ export function PatchGallery({
   const galleryBucket = useViewerStore((s) => s.galleryBucket);
   const galleryPage = useViewerStore((s) => s.galleryPage);
   const setGalleryPage = useViewerStore((s) => s.setGalleryPage);
+  const localRoi = useViewerStore((s) => s.localRoi);
   const setSelectedPatch = useViewerStore((s) => s.setSelectedPatch);
   const flyToPatch = useViewerStore((s) => s.flyToPatch);
 
   const pageSize =
     variant === "sidebar" ? GALLERY_PAGE_SIZE_SIDEBAR : GALLERY_PAGE_SIZE;
 
-  const filtered: PatchEntry[] = patchesWithCellsForTps(
-    manifest?.patches ?? [],
-  ).filter((p) => p.patchPredBucket === galleryBucket);
+  const roiPatchIdSet = useMemo(() => {
+    if (!manifest || !localRoi) return null;
+    return new Set(
+      patchesIntersectingRect(manifest, localRoi.world).map((p) => p.patchId),
+    );
+  }, [manifest, localRoi]);
+
+  const filtered: PatchEntry[] = useMemo(() => {
+    const base = patchesWithCellsForTps(manifest?.patches ?? []).filter(
+      (p) => p.patchPredBucket === galleryBucket,
+    );
+    if (!roiPatchIdSet) return base;
+    return base.filter((p) => roiPatchIdSet.has(p.patchId));
+  }, [manifest, galleryBucket, roiPatchIdSet]);
+
+  const roiKey = localRoi
+    ? `${localRoi.world.x},${localRoi.world.y},${localRoi.world.w},${localRoi.world.h}`
+    : "";
+  useEffect(() => {
+    setGalleryPage(0);
+  }, [roiKey, galleryBucket, setGalleryPage]);
   const sorted = [...filtered].sort((a, b) => b.patchPredTps - a.patchPredTps);
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const page = Math.min(galleryPage, totalPages - 1);
@@ -66,11 +87,18 @@ export function PatchGallery({
       >
         <div className="flex items-center justify-between gap-2">
           <span className={titleClass}>Patch Gallery</span>
+          {localRoi ? (
+            <span className="text-app-body max-w-[55%] truncate text-right text-[10px] font-medium uppercase tracking-wide text-sky-400/90">
+              ROI only
+            </span>
+          ) : null}
         </div>
 
         {sorted.length === 0 ? (
           <div className="text-app-body flex min-h-[120px] flex-1 items-center justify-center rounded-md border border-dashed text-muted-foreground">
-            No patches in this bucket.
+            {localRoi
+              ? "No patches in this bucket within the ROI."
+              : "No patches in this bucket."}
           </div>
         ) : variant === "sidebar" ? (
           <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overflow-x-hidden pr-0.5">

@@ -32,12 +32,21 @@ export function MetricInlinePair({
   return (
     <div
       className={cn(
-        "flex items-baseline justify-between gap-2 text-[10px]",
+        "flex items-baseline justify-between gap-2",
+        variant === "card"
+          ? "text-[9px] font-semibold uppercase tracking-[0.1em]"
+          : "text-[10px]",
         vs.label,
       )}
     >
       <span>{label}</span>
-      <span className={cn("shrink-0 font-mono tabular-nums text-xs", vs.value)}>
+      <span
+        className={cn(
+          "shrink-0 font-mono tabular-nums font-semibold",
+          variant === "card" ? "text-[11px]" : "text-xs",
+          vs.value,
+        )}
+      >
         {valueLabel}
       </span>
     </div>
@@ -64,14 +73,18 @@ export function MetricHBar({
     <div className="flex min-w-0 flex-col gap-0.5">
       <div
         className={cn(
-          "flex items-baseline justify-between gap-2 text-[10px]",
+          "flex items-baseline justify-between gap-2",
+          variant === "card"
+            ? "text-[9px] font-semibold uppercase tracking-[0.1em]"
+            : "text-[10px]",
           vs.label,
         )}
       >
         <span>{label}</span>
         <span
           className={cn(
-            "shrink-0 font-mono tabular-nums text-xs",
+            "shrink-0 font-mono tabular-nums font-semibold",
+            variant === "card" ? "text-[11px]" : "text-xs",
             vs.value,
           )}
         >
@@ -114,14 +127,18 @@ export function CellMixStackedBar({
     <div className="flex min-w-0 flex-col gap-0.5">
       <div
         className={cn(
-          "flex items-baseline justify-between gap-2 text-[10px]",
+          "flex items-baseline justify-between gap-2",
+          variant === "card"
+            ? "text-[9px] font-semibold uppercase tracking-[0.1em]"
+            : "text-[10px]",
           vs.label,
         )}
       >
         <span>Cell mix (+ / −)</span>
         <span
           className={cn(
-            "shrink-0 font-mono tabular-nums text-xs",
+            "shrink-0 font-mono tabular-nums font-semibold leading-tight",
+            variant === "card" ? "text-[10px] sm:text-[11px]" : "text-xs",
             vs.value,
           )}
         >

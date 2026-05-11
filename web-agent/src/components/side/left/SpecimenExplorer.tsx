@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { FolderInput } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useViewerStore } from "@/lib/store";
@@ -41,6 +41,11 @@ export function SpecimenExplorer({ className }: { className?: string }) {
 
   const loading = caseListStatus === "loading";
 
+  const casesByTpsDesc = useMemo(
+    () => [...caseList].sort((a, b) => b.meanPatchTps - a.meanPatchTps),
+    [caseList],
+  );
+
   return (
     <div className={cn("flex min-h-0 flex-col gap-1.5 overflow-hidden", className)}>
       <div className="flex shrink-0 items-center justify-between gap-1">
@@ -70,7 +75,7 @@ export function SpecimenExplorer({ className }: { className?: string }) {
             import.
           </div>
         ) : (
-          caseList.map((c) => {
+          casesByTpsDesc.map((c) => {
             const selected = c.caseId === caseId;
             const thumbUrl = caseFileRelativeUrl(c.caseId, c.thumbnailRelative);
             const tpsPct = (c.meanPatchTps * 100).toFixed(1);
@@ -101,12 +106,12 @@ export function SpecimenExplorer({ className }: { className?: string }) {
                     loading="lazy"
                   />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="font-mono text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
+                <div className="min-w-0 flex-1 overflow-x-auto">
+                  <div className="inline-block max-w-none whitespace-nowrap font-mono text-[11px] leading-snug text-muted-foreground">
                     <span className="font-sans text-[10px] uppercase tracking-wide text-muted-foreground/85">
                       ID:{" "}
                     </span>
-                    <span className="break-all">{c.caseId}</span>
+                    <span>{c.caseId}</span>
                   </div>
                   <div className="text-[13px] font-bold tabular-nums leading-snug text-emerald-400">
                     TPS: {tpsPct}%

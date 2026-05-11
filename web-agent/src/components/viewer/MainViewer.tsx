@@ -6,7 +6,6 @@ import { ViewerContext } from "./ViewerContext";
 import { PatchOverlay } from "./PatchOverlay";
 import { LocalRoiSelector, LocalRoiToolbar } from "./LocalRoiSelector";
 import { NavigationOverview } from "@/components/side/left/NavigationOverview";
-import { RoiSummaryPopup } from "./RoiSummaryPopup";
 import { TpsHeatmapOverlay } from "./TpsHeatmapOverlay";
 import { useViewerStore } from "@/lib/store";
 import { toOsdTileSource } from "./osdTileSource";
@@ -258,7 +257,6 @@ export function MainViewer() {
             </span>
             <LocalRoiToolbar />
           </div>
-          <RoiSummaryPopup />
           <div ref={leftRef} className="absolute inset-0" />
           <PatchOverlay />
           <LocalRoiSelector />

@@ -3,7 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PD-L1 TPS Visual Analytics · ChinaVis",
+  title: "TPS-Vis",
   description:
     "Research prototype for multiscale PD-L1 tumor proportion score (TPS) analysis: whole-slide navigation, patch-level inference with spatial Hilbert ordering, cell-scale evidence, and optional LLM-assisted case reasoning.",
 };

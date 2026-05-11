@@ -22,7 +22,6 @@ import {
   buildTpsPercentBins,
   countPatchesByBucket,
   createLinearTpsAxis,
-  createProportionalTpsAxis,
   maxBin,
   sumBins,
   TPS_HISTOGRAM_BIN_COUNT,
@@ -30,58 +29,23 @@ import {
 import { patchesWithCellsForTps } from "@/lib/patchFilters";
 import { cn } from "@/lib/utils";
 import { HilbertSpatialStrip } from "./HilbertSpatialStrip";
+import { SelectionRoiPanel } from "@/components/viewer/SelectionRoiPanel";
 
 /** ROI bars: tallest bin uses this fraction of plot height (Y scale = maxBin / ratio). */
 const ROI_FILL_RATIO = 0.8;
 
-/** Muted dark strata fills (decorative only; not clinical palette). */
+/** Dark chart strata — same hue families as `BUCKET_STYLES` for coherent proportion bands. */
 const BAND_SURFACE: Record<PatchBucket, string> = {
-  Negative: "#2c2c32",
-  TPS_1: "#3a3320",
-  TPS_10: "#3d2520",
-  TPS_50: "#3a1818",
-};
-
-const BAND_SHORT: Record<PatchBucket, string> = {
-  Negative: "Neg",
-  TPS_1: "Low",
-  TPS_10: "Med",
-  TPS_50: "High",
+  Negative: "#152c48",
+  TPS_1: "#103d2e",
+  TPS_10: "#3d2608",
+  TPS_50: "#3d1018",
 };
 
 const BAND_BUCKETS: PatchBucket[] = ["Negative", "TPS_1", "TPS_10", "TPS_50"];
 
 const ROI_FILL = "#22d3ee";
 const ROI_STROKE = "rgba(224,242,254,0.85)";
-
-type Pt = { x: number; y: number };
-
-/** Linear segments only — cubic smoothing overshoots below the Y=0 baseline between peaks and zeros. */
-function traceHistogramPolyline(ctx: CanvasRenderingContext2D, points: Pt[]) {
-  if (points.length === 0) return;
-  ctx.moveTo(points[0]!.x, points[0]!.y);
-  for (let i = 1; i < points.length; i++) {
-    ctx.lineTo(points[i]!.x, points[i]!.y);
-  }
-}
-
-function seriesPoints(
-  counts: number[],
-  yMax: number,
-  mapTpsToX: (tps: number) => number,
-  py1: number,
-  plotH: number,
-): Pt[] {
-  const yTop = py1 - plotH;
-  const pts: Pt[] = [];
-  for (let k = 0; k < TPS_HISTOGRAM_BIN_COUNT; k++) {
-    const v = counts[k]!;
-    const yRaw = py1 - (v / yMax) * plotH;
-    const y = Math.max(yTop, Math.min(py1, yRaw));
-    pts.push({ x: mapTpsToX(k), y });
-  }
-  return pts;
-}
 
 function drawRoiBars(
   ctx: CanvasRenderingContext2D,
@@ -359,20 +323,12 @@ export function TpsDistributionBar() {
     return () => cancelAnimationFrame(yScaleAnimRef.current);
   }, [yScaleTarget]);
 
-  const proportionalAxis = useMemo(() => {
-    if (!manifest) return null;
-    return createProportionalTpsAxis(
-      bucketCounts ?? countPatchesByBucket([]),
-      geom.PX0,
-      geom.PLOT_W,
-    );
-  }, [manifest, bucketCounts, geom.PX0, geom.PLOT_W]);
-
   const linearAxis = useMemo(() => {
     if (!manifest) return null;
     return createLinearTpsAxis(geom.PX0, geom.PLOT_W);
   }, [manifest, geom.PX0, geom.PLOT_W]);
 
+  /** Whole-slide and ROI share the same linear 0–100% x mapping; used only for ROI bar fade-in. */
   const [axisBlend, setAxisBlend] = useState(0);
   const axisBlendRef = useRef(0);
   const axisBlendAnimRef = useRef(0);
@@ -405,35 +361,13 @@ export function TpsDistributionBar() {
     return () => cancelAnimationFrame(axisBlendAnimRef.current);
   }, [roiBarsOnly]);
 
-  const blendedAxis = useMemo(() => {
-    const p = proportionalAxis;
-    const l = linearAxis;
-    if (!p || !l) {
-      return (
-        p ??
-        l ??
-        createLinearTpsAxis(geom.PX0, geom.PLOT_W)
-      );
-    }
-    const b = axisBlend;
-    const mapTpsToX = (tps: number) =>
-      p.mapTpsToX(tps) + (l.mapTpsToX(tps) - p.mapTpsToX(tps)) * b;
-    const bandWidths = [
-      p.bandWidths[0]! + (l.bandWidths[0]! - p.bandWidths[0]!) * b,
-      p.bandWidths[1]! + (l.bandWidths[1]! - p.bandWidths[1]!) * b,
-      p.bandWidths[2]! + (l.bandWidths[2]! - p.bandWidths[2]!) * b,
-      p.bandWidths[3]! + (l.bandWidths[3]! - p.bandWidths[3]!) * b,
-    ] as [number, number, number, number];
-    return { mapTpsToX, bandWidths };
-  }, [proportionalAxis, linearAxis, axisBlend, geom.PX0, geom.PLOT_W]);
+  const chartAxis = useMemo(
+    () => linearAxis ?? createLinearTpsAxis(geom.PX0, geom.PLOT_W),
+    [linearAxis, geom.PX0, geom.PLOT_W],
+  );
 
-  const [bandPopover, setBandPopover] = useState<{
-    clientX: number;
-    clientY: number;
-    bucket: PatchBucket;
-  } | null>(null);
-
-  const xBoundaryLabels = [0, 1, 10, 50, 100] as const;
+  /** Omit 0%: too close to 1% label on narrow layouts. */
+  const xBoundaryLabels = [1, 10, 50, 100] as const;
   const minorTicks = useMemo(() => {
     const skip = new Set([10, 50]);
     const out: number[] = [];
@@ -445,32 +379,9 @@ export function TpsDistributionBar() {
 
   const curveScale = Math.max(1e-6, displayYScale);
   const yTickVals = yTicks(Math.max(1, Math.ceil(curveScale)));
-  const curveOverflows = yMaxAll > curveScale * 1.02;
-  /** Fade whole-slide curve out while morphing axis into ROI mode; fade in when leaving. */
-  const curveAlpha = roiBarsOnly ? 1 - axisBlend : 1;
-  const showWholeSlideCurve = !curveOverflows && curveAlpha > 0.01;
 
-  const totalPatches = tpsPatches.length;
-
-  const bandStats = useMemo(() => {
-    if (!bucketCounts || totalPatches <= 0) return null;
-    return BAND_BUCKETS.map((b) => ({
-      bucket: b,
-      n: bucketCounts[b],
-      pct: (bucketCounts[b]! / totalPatches) * 100,
-    }));
-  }, [bucketCounts, totalPatches]);
-
-  const { mapTpsToX, bandWidths } = blendedAxis;
+  const { mapTpsToX, bandWidths } = chartAxis;
   const { w: vbW, h: vbH, PX0, PX1, PY0, PY1, PLOT_H } = geom;
-
-  const allPts = seriesPoints(
-    allCounts,
-    curveScale,
-    mapTpsToX,
-    PY1,
-    PLOT_H,
-  );
 
   const bandLayouts = BAND_BUCKETS.reduce(
     (acc, b, i) => {
@@ -485,12 +396,8 @@ export function TpsDistributionBar() {
     [] as { bucket: PatchBucket; x: number; width: number }[],
   );
 
-  const popoverStat = bandPopover
-    ? bandStats?.find((s) => s.bucket === bandPopover.bucket)
-    : null;
-
   useEffect(() => {
-    if (!manifest || !proportionalAxis || !linearAxis) return;
+    if (!manifest || !linearAxis) return;
     const canvas = chartCanvasRef.current;
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
@@ -514,13 +421,6 @@ export function TpsDistributionBar() {
       ctx.lineWidth = 0.5;
       ctx.fillRect(x, PY0, width, PLOT_H);
       ctx.strokeRect(x, PY0, width, PLOT_H);
-      if (!roiBarsOnly) {
-        ctx.fillStyle = "rgba(180,189,203,0.85)";
-        ctx.font = "500 9px sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        ctx.fillText(BAND_SHORT[bucket], x + width / 2, PY0 + 3);
-      }
     }
 
     ctx.strokeStyle = "rgba(255,255,255,0.25)";
@@ -536,7 +436,6 @@ export function TpsDistributionBar() {
     ctx.setLineDash([]);
 
     for (const t of xBoundaryLabels) {
-      if (roiBarsOnly && t === 0) continue;
       const x = mapTpsToX(t);
       const strong = t === 1 || t === 10 || t === 50;
       ctx.strokeStyle = strong ? "rgba(56,189,248,0.55)" : "rgba(255,255,255,0.4)";
@@ -557,6 +456,8 @@ export function TpsDistributionBar() {
       ctx.moveTo(PX0, y);
       ctx.lineTo(PX1, y);
       ctx.stroke();
+      /** Omit Y label "0": sits on baseline next to x-axis "1%" and overlaps on narrow charts. */
+      if (yv === 0) continue;
       ctx.fillStyle = "rgba(160,170,185,0.92)";
       ctx.font = "400 9px sans-serif";
       ctx.textAlign = "right";
@@ -573,38 +474,13 @@ export function TpsDistributionBar() {
     ctx.lineTo(PX0, PY1);
     ctx.stroke();
 
-    if (showWholeSlideCurve) {
+    /** Whole-slide: 1% bin bars only (no smoothed density curve). */
+    if (!roiBarsOnly) {
       ctx.save();
-      ctx.globalAlpha = curveAlpha;
-      const areaGrad = ctx.createLinearGradient(0, PY0, 0, PY1);
-      areaGrad.addColorStop(0, "rgba(56,189,248,0.22)");
-      areaGrad.addColorStop(1, "rgba(56,189,248,0)");
-      ctx.fillStyle = areaGrad;
-      ctx.beginPath();
-      traceHistogramPolyline(ctx, allPts);
-      const first = allPts[0]!;
-      const last = allPts[allPts.length - 1]!;
-      ctx.lineTo(last.x, PY1);
-      ctx.lineTo(first.x, PY1);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.beginPath();
-      traceHistogramPolyline(ctx, allPts);
-      ctx.strokeStyle = "rgba(56,189,248,0.55)";
-      ctx.lineWidth = 2.6;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.shadowColor = "rgba(56,189,248,0.5)";
-      ctx.shadowBlur = 4;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      ctx.beginPath();
-      traceHistogramPolyline(ctx, allPts);
-      ctx.strokeStyle = "rgba(224,242,254,0.9)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
+      ctx.fillStyle = "rgba(56,189,248,0.58)";
+      ctx.strokeStyle = "rgba(125,211,252,0.42)";
+      ctx.lineWidth = 0.35;
+      drawRoiBars(ctx, allCounts, curveScale, mapTpsToX, PY1, PLOT_H);
       ctx.restore();
     }
 
@@ -626,16 +502,14 @@ export function TpsDistributionBar() {
     }
 
     for (const t of xBoundaryLabels) {
-      if (roiBarsOnly && t === 0) continue;
       const x = mapTpsToX(t);
       const strong = t === 1 || t === 10 || t === 50;
       ctx.fillStyle = strong ? "rgba(125,211,252,0.95)" : "rgba(160,170,185,0.95)";
       ctx.font = strong ? "600 9px sans-serif" : "400 9px sans-serif";
       ctx.textBaseline = "bottom";
-      if (t === 0) ctx.textAlign = "left";
-      else if (t === 100) ctx.textAlign = "right";
+      if (t === 100) ctx.textAlign = "right";
       else ctx.textAlign = "center";
-      ctx.fillText(`${t}%`, t === 0 ? x + 2 : t === 100 ? x - 2 : x, vbH - 4);
+      ctx.fillText(`${t}%`, t === 100 ? x - 2 : x, vbH - 4);
     }
   }, [
     PLOT_H,
@@ -643,18 +517,14 @@ export function TpsDistributionBar() {
     PX1,
     PY0,
     PY1,
-    allPts,
+    allCounts,
     bandLayouts,
-    curveOverflows,
     curveScale,
-    showWholeSlideCurve,
-    curveAlpha,
     axisBlend,
     displayRoiCounts,
     hasRoi,
     mapTpsToX,
     minorTicks,
-    proportionalAxis,
     linearAxis,
     roiBarsOnly,
     roiCounts,
@@ -694,23 +564,17 @@ export function TpsDistributionBar() {
                 sideOffset={6}
                 className="max-w-none whitespace-nowrap text-[11px]"
               >
-                Whole-slide TPS% histogram (1% bins, 0–100%) · X width ∝ stratum
-                patch fraction · With ROI and patches inside: linear 0–100% axis (equal
-                width per TPS%), ROI bars only (tallest ~80% height); Y = bin counts
+                Linear 0–100% TPS% axis (equal width per percent). Whole-slide: 1% bin bars.
+                With ROI and patches inside: ROI bars (tallest ~80% height); Y = bin counts
               </TooltipContent>
             </Tooltip>
           </div>
-          {hasRoi ? (
-            <p className="text-[11px] text-muted-foreground">
-              Local ROI · {localRoi!.summary.patchCount} patches (selection overlap)
-            </p>
-          ) : null}
         </div>
 
-        <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-3 lg:flex-row lg:items-stretch">
           <div
             ref={chartLayoutRef}
-            className="flex min-h-0 w-full min-w-full max-w-full flex-1 flex-col gap-1"
+            className="flex min-h-0 min-w-0 flex-[33] flex-col gap-1 lg:min-w-0"
           >
             <div
               ref={chartWrapRef}
@@ -737,11 +601,6 @@ export function TpsDistributionBar() {
                     aria-label={`Select ${BUCKET_STYLES[bucket].fullLabel} bucket`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setBandPopover({
-                        clientX: e.clientX,
-                        clientY: e.clientY,
-                        bucket,
-                      });
                       setGalleryBucket(bucket);
                     }}
                   />
@@ -759,28 +618,14 @@ export function TpsDistributionBar() {
               />
             </div>
           </div>
-        </div>
 
-        {bandPopover && popoverStat ? (
-          <div
-            role="tooltip"
-            className="pointer-events-auto fixed z-[90] min-w-[160px] rounded-md border border-border/70 bg-background/96 px-2.5 py-2 text-[10px] shadow-lg backdrop-blur-sm"
-            style={{
-              left: bandPopover.clientX,
-              top: bandPopover.clientY,
-              transform: "translate(-50%, 12px)",
-            }}
-            onMouseLeave={() => setBandPopover(null)}
-          >
-            <div className="font-medium text-foreground">
-              {BUCKET_STYLES[popoverStat.bucket].fullLabel}
-            </div>
-            <div className="mt-0.5 tabular-nums text-muted-foreground">
-              {popoverStat.n} / {totalPatches} patches (
-              {popoverStat.pct.toFixed(1)}%)
-            </div>
+          <div className="flex min-h-0 w-full shrink-0 flex-col border-border/45 pt-3 lg:max-w-[21%] lg:min-h-0 lg:flex-[7] lg:min-w-[140px] lg:border-l lg:border-t-0 lg:pt-0 lg:pl-3 border-t">
+            <SelectionRoiPanel
+              variant="embedded"
+              className="min-h-0 flex-1 overflow-y-auto"
+            />
           </div>
-        ) : null}
+        </div>
       </CardContent>
     </Card>
   );
