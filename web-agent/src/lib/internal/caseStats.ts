@@ -386,7 +386,7 @@ export function formatCaseStatsForPrompt(s: CaseStatsSnapshot): string {
       `  - Snapped rect: x=${snapped.x}, y=${snapped.y}, w=${snapped.w}, h=${snapped.h}`,
     );
     lines.push(
-      `  - Patch slots: ${summary.patchCount} (real=${summary.realPatchCount}, synthetic=${summary.syntheticPatchCount})`,
+      `  - Patches (cells>0 in ROI): ${summary.realPatchCount}; blank grid slots: ${summary.syntheticPatchCount}`,
     );
     lines.push(
       `  - Cells: total=${summary.totalCells}, positive=${summary.positiveCells}, negative=${summary.negativeCells}`,

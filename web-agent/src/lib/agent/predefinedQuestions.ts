@@ -30,7 +30,7 @@ These values are produced by this viewer’s pipeline (same rules as the charts)
 
 - **ROI active**: {{hasRoi}}
 - **Snapped rectangle (WSI coords)**: x={{roiX}}, y={{roiY}}, w={{roiW}}, h={{roiH}}
-- **Patch slots** (including synthetic grid slots): {{roiPatchCount}} · **Synthetic-only slots**: {{roiSynthPatchCount}}
+- **Patches (cells>0 in ROI)**: {{roiPatchCount}} · **Blank grid slots (no export)**: {{roiSynthPatchCount}}
 - **Cells** · total {{roiTotalCells}} · positive {{roiPosCells}} · negative {{roiNegCells}}
 - **Cell-weighted mean TPS in ROI**: {{roiMeanTpsPct}}%
 - **Patch buckets (with cells)**: Neg {{roiBucketNeg}}, 1–9% {{roiBucket1}}, 10–49% {{roiBucket10}}, ≥50% {{roiBucket50}}

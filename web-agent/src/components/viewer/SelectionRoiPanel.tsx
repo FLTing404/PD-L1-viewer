@@ -4,7 +4,10 @@ import { useMemo } from "react";
 import { X } from "lucide-react";
 import { useViewerStore, computeWsiStats } from "@/lib/store";
 import { patchesWithCellsForTps } from "@/lib/patchFilters";
-import { patchesIntersectingRect } from "@/lib/localRoiStats";
+import {
+  computeLocalSelectionFromUserRect,
+  patchesIntersectingRect,
+} from "@/lib/localRoiStats";
 import type { PatchEntry } from "@/types/case";
 import { CellMixStackedBar, MetricHBar } from "@/components/charts/MetricBars";
 import { cn } from "@/lib/utils";
@@ -45,14 +48,32 @@ export function SelectionRoiPanel({
     return cellWeightedMeanTps(inRoi);
   }, [manifest, localRoi]);
 
+  /**
+   * Recompute ROI scalar stats from the current manifest + snapped rect every render cycle.
+   * Do not use `localRoi.summary` from the drag handler alone — it is a snapshot and becomes
+   * stale after pipeline changes; guided Agent calls `getCaseStats` fresh each time.
+   */
+  const liveRoiSummary = useMemo(() => {
+    if (!manifest || !localRoi) return null;
+    return computeLocalSelectionFromUserRect(manifest, localRoi.world)?.summary ?? null;
+  }, [manifest, localRoi]);
+
   if (!manifest) return null;
 
   const hasRoi = Boolean(localRoi);
-  const s = localRoi?.summary;
-  const positiveCells = hasRoi ? s!.positiveCells : wsiStats.positiveCells;
-  const negativeCells = hasRoi ? s!.negativeCells : wsiStats.negativeCells;
-  const patchCount = hasRoi ? s!.patchCount : wsiStats.patchCount;
-  const totalCells = hasRoi ? s!.totalCells : wsiStats.totalCells;
+
+  const roiScalar =
+    hasRoi && liveRoiSummary
+      ? liveRoiSummary
+      : hasRoi && localRoi?.summary
+        ? localRoi.summary
+        : null;
+  if (hasRoi && !roiScalar) return null;
+
+  const positiveCells = hasRoi ? roiScalar!.positiveCells : wsiStats.positiveCells;
+  const negativeCells = hasRoi ? roiScalar!.negativeCells : wsiStats.negativeCells;
+  const patchCount = hasRoi ? roiScalar!.patchCount : wsiStats.patchCount;
+  const totalCells = hasRoi ? roiScalar!.totalCells : wsiStats.totalCells;
   const meanTps = hasRoi ? roiMeanTps : wsiStats.meanTps;
 
   const subtitle = hasRoi ? "Local ROI" : "Whole slide";
