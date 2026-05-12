@@ -8,34 +8,41 @@ export interface WorldRect {
 }
 
 export interface LocalSelectionSummary {
-  /** Real manifest patches intersecting snapped ROI */
+  /** Real manifest patches intersecting snapped ROI (tissue patches with cells>0). */
   realPatchCount: number;
-  /** Simulated all-negative grid slots in ROI with no export */
+  /**
+   * Grid slots inside the snapped ROI that have no exported (real) patch — pure
+   * background tiles that the snap covers. Kept for visual context only; **not**
+   * folded into `patchCount` / `totalCells` (those are real-only).
+   */
   syntheticPatchCount: number;
+  /** Real patches only. Excludes synthetic / blank grid slots. */
   patchCount: number;
+  /** Sum of `numCells` over real patches only. */
   totalCells: number;
   positiveCells: number;
   negativeCells: number;
 }
 
+/** Sub-pixel tolerance so patches touching the ROI edge are not dropped (strict < loses shared boundaries). */
+const RECT_OVERLAP_EPS = 0.5;
+
 function rectIntersect(a: WorldRect, b: WorldRect): boolean {
   return (
-    a.x < b.x + b.w &&
-    a.x + a.w > b.x &&
-    a.y < b.y + b.h &&
-    a.y + a.h > b.y
+    a.x < b.x + b.w + RECT_OVERLAP_EPS &&
+    a.x + a.w + RECT_OVERLAP_EPS > b.x &&
+    a.y < b.y + b.h + RECT_OVERLAP_EPS &&
+    a.y + a.h + RECT_OVERLAP_EPS > b.y
   );
 }
 
-function patchRect(p: PatchEntry): WorldRect {
-  return { x: p.px, y: p.py, w: p.width, h: p.height };
-}
-
-function averageCellsPerPatch(manifest: CaseManifest): number {
-  const n = manifest.patches.length;
-  if (n === 0) return 64;
-  const total = manifest.patches.reduce((s, p) => s + p.numCells, 0);
-  return Math.max(1, Math.round(total / n));
+/** Fallback to manifest patch grid size when width/height are missing or zero (otherwise rect tests drop the patch). */
+function patchRect(p: PatchEntry, patchSize: number): WorldRect {
+  const w =
+    Number.isFinite(p.width) && p.width > 0 ? p.width : patchSize;
+  const h =
+    Number.isFinite(p.height) && p.height > 0 ? p.height : patchSize;
+  return { x: p.px, y: p.py, w, h };
 }
 
 /**
@@ -63,8 +70,11 @@ export function imageDragToWorldRect(
 
 /**
  * From drawn ROI: snap to the union of all 512×512 grid cells that intersect the drag rect
- * (includes blank / synthetic tiles when `stitched.jpg` fills the full WSI grid).
- * Manifest-only patches alone would miss white-only regions.
+ * (snap geometry includes blank / background tiles so the rubber band aligns with the WSI
+ * patch grid, even over white areas). Statistics, however, are computed from **real
+ * exported patches only** (those with `numCells > 0`): blank grid slots inside the snapped
+ * rectangle are reported as `syntheticPatchCount` for visual context, but they are
+ * excluded from `patchCount`, `totalCells`, and positive / negative cell counts.
  */
 export function computeLocalSelectionFromUserRect(
   manifest: CaseManifest,
@@ -113,22 +123,21 @@ export function computeLocalSelectionFromUserRect(
     h: maxB - minY,
   };
 
-  const realPatches = manifest.patches.filter((p) =>
-    rectIntersect(patchRect(p), snapped),
+  /** Real exported patches with cells > 0 that fall inside the snapped grid. */
+  const patchesInSnapped = patchesIntersectingRect(manifest, snapped).filter(
+    (p) => p.numCells > 0,
   );
+
+  /** Blank grid slots (no exported patch with cells) inside the snapped rect — context only. */
   const patchKey = (gx: number, gy: number) => `${gx},${gy}`;
-  const exportAtSlot = new Map<string, PatchEntry>();
-  for (const p of manifest.patches) {
-    exportAtSlot.set(patchKey(p.px, p.py), p);
+  const realSlotSet = new Set<string>();
+  for (const p of patchesInSnapped) {
+    realSlotSet.add(patchKey(p.px, p.py));
   }
-
-  const avgCells = averageCellsPerPatch(manifest);
-
   const xStart = Math.floor(snapped.x / ps) * ps;
   const yStart = Math.floor(snapped.y / ps) * ps;
   const xEnd = snapped.x + snapped.w;
   const yEnd = snapped.y + snapped.h;
-
   let syntheticPatchCount = 0;
   for (let gx = xStart; gx < xEnd; gx += ps) {
     if (gx >= wsiW) continue;
@@ -139,26 +148,24 @@ export function computeLocalSelectionFromUserRect(
       if (cw <= 0 || ch <= 0) continue;
       const cell: WorldRect = { x: gx, y: gy, w: cw, h: ch };
       if (!rectIntersect(cell, snapped)) continue;
-      if (!exportAtSlot.has(patchKey(gx, gy))) syntheticPatchCount++;
+      if (!realSlotSet.has(patchKey(gx, gy))) syntheticPatchCount++;
     }
   }
 
-  const realPatchCount = realPatches.length;
+  const realPatchCount = patchesInSnapped.length;
   let totalCells = 0;
   let positiveCells = 0;
-  for (const p of realPatches) {
+  for (const p of patchesInSnapped) {
     totalCells += p.numCells;
     positiveCells += Math.round(p.patchPredTps * p.numCells);
   }
   positiveCells = Math.min(positiveCells, totalCells);
-
-  totalCells += syntheticPatchCount * avgCells;
   const negativeCells = totalCells - positiveCells;
 
   const summary: LocalSelectionSummary = {
     realPatchCount,
     syntheticPatchCount,
-    patchCount: realPatchCount + syntheticPatchCount,
+    patchCount: realPatchCount,
     totalCells,
     positiveCells,
     negativeCells,
@@ -172,8 +179,10 @@ export function patchesIntersectingRect(
   manifest: CaseManifest,
   worldRect: WorldRect,
 ): PatchEntry[] {
-  return manifest.patches.filter((p) =>
-    rectIntersect(patchRect(p), worldRect),
+  const ps = manifest.wsiMeta.patchSize;
+  return manifest.patches.filter(
+    (p) =>
+      p.numCells > 0 && rectIntersect(patchRect(p, ps), worldRect),
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { FolderInput } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useViewerStore } from "@/lib/store";
@@ -21,12 +21,7 @@ export function SpecimenExplorer({ className }: { className?: string }) {
   const caseId = useViewerStore((s) => s.caseId);
   const setCase = useViewerStore((s) => s.setCase);
   const loadCaseList = useViewerStore((s) => s.loadCaseList);
-
-  useEffect(() => {
-    if (caseListStatus === "idle") {
-      void loadCaseList();
-    }
-  }, [caseListStatus, loadCaseList]);
+  const caseListError = useViewerStore((s) => s.caseListError);
 
   const handleImport = async () => {
     if (typeof window !== "undefined" && "showDirectoryPicker" in window) {
@@ -58,8 +53,8 @@ export function SpecimenExplorer({ className }: { className?: string }) {
           variant="outline"
           size="icon"
           className="size-9 shrink-0"
-          title="Import Source Directory — refresh scanned analysis instances from the server data root"
-          aria-label="Import Source Directory"
+          title="Scan cases from the server data root"
+          aria-label="Scan cases from the server data root"
           disabled={loading}
           onClick={() => void handleImport()}
         >
@@ -68,12 +63,18 @@ export function SpecimenExplorer({ className }: { className?: string }) {
       </div>
 
       <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden pr-0.5">
-        {loading && caseList.length === 0 ? (
-          <div className="text-app-body text-muted-foreground">Loading…</div>
-        ) : caseList.length === 0 ? (
+        {loading && caseList.length === 0 ? null : caseListStatus === "error" ? (
+          <div className="space-y-1.5 text-app-body text-destructive">
+            <p className="font-medium">Failed to load case list.</p>
+            <p className="break-all text-[11px] opacity-90">{caseListError}</p>
+            <p className="text-muted-foreground text-[11px]">
+              Check the data root and network, then click the folder button to
+              retry.
+            </p>
+          </div>
+        ) : caseListStatus === "idle" && caseList.length === 0 ? null : caseList.length === 0 ? (
           <div className="text-app-body text-muted-foreground">
-            No analysis instances. Place case folders under the data root, then
-            import.
+            <p className="text-[12px]">No cases found. Try scanning again.</p>
           </div>
         ) : (
           casesByTpsDesc.map((c) => {

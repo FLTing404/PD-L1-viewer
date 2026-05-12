@@ -12,17 +12,53 @@ interface RawSummary {
   thumbnail_file?: string;
 }
 
+/**
+ * Splits one CSV line honoring double-quoted fields (e.g. when patches_manifest.csv was
+ * re-emitted by tooling such as `Export-Csv` which quotes every field). Without this,
+ * a leading `"` makes `parseFloat` return NaN and the case is treated as 0 mean TPS.
+ */
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cur += ch;
+      }
+    } else if (ch === ",") {
+      out.push(cur);
+      cur = "";
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
 function meanPatchTpsFromManifestCsv(text: string): number {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const cleaned = text.replace(/^\uFEFF/, "");
+  const lines = cleaned.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length < 2) return 0;
-  const header = lines[0]!.split(",").map((h) => h.trim());
+  const header = splitCsvLine(lines[0]!).map((h) => h.trim());
   const tpsIdx = header.indexOf("patch_pred_tps");
   const numCellsIdx = header.indexOf("num_cells");
   if (tpsIdx < 0) return 0;
   let sum = 0;
   let n = 0;
   for (let i = 1; i < lines.length; i++) {
-    const parts = lines[i]!.split(",");
+    const parts = splitCsvLine(lines[i]!);
     if (numCellsIdx >= 0) {
       const nc = parseInt(parts[numCellsIdx] ?? "0", 10);
       if (!Number.isFinite(nc) || nc <= 0) continue;
