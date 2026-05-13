@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 
 const FAB_SIZE = 48;
 const PANEL_W = 440;
-const PANEL_H = 760;
+/** Max fraction of viewport height for the open panel (chrome + chat). */
+const PANEL_MAX_VH = 0.8;
 const DRAG_THRESHOLD = 5;
 /** Padding from viewport edge when snapping the closed FAB to a corner */
 const FAB_EDGE_MARGIN = 20;
@@ -77,10 +78,14 @@ function useViewportSize() {
 export function AiAssistantFloating() {
   const [mounted, setMounted] = useState(false);
   const { w: vw, h: vh } = useViewportSize();
+  const maxPanelPx = vh * PANEL_MAX_VH;
 
   const [open, setOpen] = useState(false);
   const [fabPos, setFabPos] = useState<Point>({ x: 0, y: 0 });
   const [panelPos, setPanelPos] = useState<Point>({ x: 0, y: 0 });
+  /** Measured dialog height (grows with chat until capped by maxPanelPx). */
+  const [panelMeasuredH, setPanelMeasuredH] = useState(480);
+  const panelRef = useRef<HTMLDivElement>(null);
   const panelEverPlaced = useRef(false);
   const fabPosRef = useRef(fabPos);
   fabPosRef.current = fabPos;
@@ -90,6 +95,20 @@ export function AiAssistantFloating() {
   openRef.current = open;
 
   useEffect(() => setMounted(true), []);
+
+  /** Track dialog height for viewport clamping / dragging (content-driven, max 80vh). */
+  useLayoutEffect(() => {
+    if (!open || !panelRef.current) return;
+    const el = panelRef.current;
+    const read = () => {
+      const h = el.getBoundingClientRect().height;
+      if (h > 0) setPanelMeasuredH(h);
+    };
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [open, vw, vh]);
 
   /** FAB: clamp; when closed, snap to nearest viewport corner (avoids 0,0 → wrong corner). */
   useLayoutEffect(() => {
@@ -107,25 +126,28 @@ export function AiAssistantFloating() {
       }
       return snapFabToNearestCorner(c.x, c.y, vw, vh);
     });
-    setPanelPos((p) => clampPos(p.x, p.y, PANEL_W, PANEL_H, vw, vh));
-  }, [mounted, vw, vh, open]);
+    setPanelPos((p) =>
+      clampPos(p.x, p.y, PANEL_W, Math.min(panelMeasuredH, maxPanelPx), vw, vh),
+    );
+  }, [mounted, vw, vh, open, panelMeasuredH, maxPanelPx]);
 
   useLayoutEffect(() => {
     if (!open || panelEverPlaced.current || !mounted) return;
+    const estH = Math.min(520, maxPanelPx);
     const x = fabPos.x - PANEL_W - 12;
-    const y = Math.min(fabPos.y, vh - PANEL_H - 12);
+    const y = Math.min(fabPos.y, vh - estH - 12);
     setPanelPos(
       clampPos(
         x >= 8 ? x : fabPos.x + FAB_SIZE + 12,
         clamp(y, 8, vh - 8),
         PANEL_W,
-        PANEL_H,
+        estH,
         vw,
         vh,
       ),
     );
     panelEverPlaced.current = true;
-  }, [open, mounted, fabPos.x, fabPos.y, vw, vh]);
+  }, [open, mounted, fabPos.x, fabPos.y, vw, vh, maxPanelPx]);
 
   const fabDragMoved = useRef(false);
 
@@ -187,7 +209,8 @@ export function AiAssistantFloating() {
       if (!moved) return;
       const vw0 = window.innerWidth;
       const vh0 = window.innerHeight;
-      setPanelPos(clampPos(origin.x + dx, origin.y + dy, PANEL_W, PANEL_H, vw0, vh0));
+      const elH = panelRef.current?.getBoundingClientRect().height ?? panelMeasuredH;
+      setPanelPos(clampPos(origin.x + dx, origin.y + dy, PANEL_W, elH, vw0, vh0));
     };
 
     const onUp = () => {
@@ -199,7 +222,7 @@ export function AiAssistantFloating() {
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
-  }, []);
+  }, [panelMeasuredH]);
 
   const onFabClick = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -242,22 +265,23 @@ export function AiAssistantFloating() {
 
       {open ? (
         <div
+          ref={panelRef}
           role="dialog"
           aria-label="Pathology Insight"
-          className="pointer-events-auto absolute flex max-h-[min(85vh,800px)] flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xl"
+          className="pointer-events-auto absolute flex max-h-[80vh] min-h-[280px] min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xl"
           style={{
             left: panelPos.x,
             top: panelPos.y,
             width: PANEL_W,
-            height: PANEL_H,
+            maxHeight: maxPanelPx,
           }}
         >
           <div
-            className="flex shrink-0 cursor-grab select-none items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 active:cursor-grabbing"
+            className="flex shrink-0 cursor-grab select-none items-center gap-2 border-b border-border bg-muted/40 px-2.5 py-1.5 active:cursor-grabbing"
             onPointerDown={onPanelHeaderPointerDown}
           >
             <GripVertical className="size-4 shrink-0 text-muted-foreground" />
-            <span className="flex-1 text-sm font-semibold tracking-wide">
+            <span className="flex-1 text-[0.66rem] font-semibold tracking-wide">
               Pathology Insight
             </span>
             <button
@@ -269,10 +293,10 @@ export function AiAssistantFloating() {
               <X className="size-4" />
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-hidden p-2 pt-0">
+          <div className="overflow-hidden p-1.5 pt-0">
             <AiAssistantChatBody
               hideChrome
-              className="h-full min-h-0 flex-1 border-0 bg-transparent shadow-none"
+              className="h-auto max-h-none min-h-0 border-0 bg-transparent shadow-none"
             />
           </div>
         </div>

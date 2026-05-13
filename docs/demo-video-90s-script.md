@@ -1,131 +1,43 @@
-# TPS-Vis 演示视频脚本（约 90 秒）
+# 演示录屏脚本要点
 
-**用途**：单机录屏 + 可选口播；按时间轴执行，总时长目标 **85–95 s**。  
-**准备**：浏览器全屏或 1920×1080 窗口；`web-agent` 已启动。进入首页后**先不要出现病例**：点击左侧 **Specimen Explorer** 右上角 **文件夹图标** 完成导入/扫描，待病例列表出现后再按脚本录制（若演示「自由对话」需配置 `DEEPSEEK_API_KEY`，否则 **只演示 Quick prompts（guided）** 即可）。
+## 0. 数据加载
 
----
+- **操作**：点击 **Import** 扫描数据根，列表出现后略作停顿。
+- **旁白**：用户通过目录导入触发服务端扫描，病例列表按整图TPS高到低加载。
+- **译文（EN）**：Folder import triggers a server-side scan; the case list loads sorted by whole-slide TPS from high to low.
 
-## 时间轴总览
+## 1. 三列布局（导入后立即）
 
-| 段 | 时间 | 内容 |
-|----|------|------|
-| A | 0:00–0:12 | 开场 + 布局 + 选病例 |
-| B | 0:12–0:28 | 主阅片：平移缩放 + 缩略导航跳转 |
-| C | 0:28–0:45 | TPS 总览：直方图 + 档位条 + 点档联动图库 |
-| D | 0:45–1:02 | ROI 框选 + 面板与直方图切换 + 图库筛选 |
-| E | 1:02–1:18 | 点图库 patch：飞行定位 + 右侧预览与详情 |
-| F | 1:18–1:30 | 热力图或 Agent（二选一，见下方变体） |
+- **左栏**：标本浏览器（病例摘要与排序）与 **Patch 图库**（分档筛选、与 ROI 联动、Fly-to-patch 触发）。
+- **中栏**：基于金字塔的 **WSI 主阅片器**，及下方 **TPS 分布总览**（比例尺直方图、临床分档背景、Selection ROI 嵌入统计）。
+- **右栏**：当前选中 patch 的 **多图层预览** 与 **细胞级详情**（异步加载细胞表、与全片基数对照）。
+- **旁白**：界面遵循「宏观导航—区域定量—微观追溯」分工：左栏承担病例与 patch 检索，中栏承担全片阅片与 TPS 量化仪表盘，右栏承担 patch 级与细胞级证据展示。
+- **译文（EN）**：The layout follows macro navigation, regional quantification, and micro-level tracing: 
+- the left rail handles case and patch retrieval, 
+- the center rail whole-slide viewing and the TPS dashboard, 
+- and the right rail patch- and cell-level evidence.
 
----
+## 2. 宏观导航、跨空白跳转与双侧读片
 
-## 详细脚本（口播可中可英，以下为中文要点）
+- **操作**：选定一例 WSI；主视图缩放、平移；打开 **TPS 热力图（KDE）** 辅助观察高响应区域；在 **导航概览** 上点击目标位置，使主视口 **跨越大面积空白** 快速锚定至远端组织岛（对照论文中同片离散排版场景）。若切片含两块离散组织区，在**导航概览**上分别跳转至患者侧与对照侧组织岛，再各自框选 ROI 作对比。
+- **旁白**：用户可打开热力图快速找到感兴趣区域，进行缩放查看；在**导航概览**上点击目标位置可快速跳转至另一组织岛，以降低大留白 WSI 中的无效平移与空间迷失成本。对含患者侧与对照侧离岛的切片，ROI 便于分别检视两侧并支撑同片远距离锚定与视觉定标。
+- **译文（EN）**：Users enable the heatmap to locate regions of interest, then zoom and pan; clicking the navigator overview jumps the viewport to another tissue island across large blank regions, reducing idle panning and spatial disorientation. For slides with separated patient- and control-side islands, ROIs support quick inspection of both sides, long-range anchoring on the same slide, and visual cross-calibration.
 
-### A. 开场与选片（0:00–0:12）
+## 3. 局部 ROI 与区域级量化
 
-**画面**  
-- 从浏览器进入应用首页；**先停留 2–3 秒**：左侧标本区为「需点击导入」提示，中间主区无切片数据。
-- **点击** Specimen Explorer 右上角 **文件夹图标**（必要时在目录选择器中确认），待列表出现后，点击 **第二个**病例卡片（若只有两个则点另一个；任选有组织区域的病例即可）。
+- **操作**：框选 ROI，释放后矩形**吸附至 patch 网格**；查看 **TPS 分布总览** 与图库中与 ROI 相关的统计与分档结果。
+- **旁白**：感兴趣区域经网格对齐后，系统对 ROI 内有效 patch 进行 TPS 可视化与统计输出。
+- **译文（EN）**：After grid alignment, the system visualizes TPS and emits statistical summaries for valid patches inside the ROI.
 
-**口播要点**  
-> 「打开后不会自动加载数据，需要先点文件夹扫描；这是面向全切片 PD-L1 TPS 的三列布局：左侧选病例与图库，中间阅片与分布总览，右侧是当前 patch 预览与细胞统计。」
+## 4. 分档联动、图库检索与 Fly-to
 
-**注意**  
-- 说话紧凑；若超时，口播可只留一句「三列布局 + 选病例」。
+- **操作**：在直方图四个颜色轮流点击一遍，最后点击最严重的，在图库中点击条目，触发 **Fly-to-patch**；在右栏查看 **多图层预览** 与 **细胞阴阳性堆叠条**（时间允许时可调节交互阈值）。
+- **旁白**：直方图与图库按临床档位建立**协调联动**。在左侧 patch 图库选中目标条目后，主阅片器与右栏同步聚焦至对应 patch；右栏呈现细胞级追溯证据，展示空间可能性热力图与阳性预测图层。
+- **译文（EN）**：The histogram and Patch Gallery are coordinated via clinical bins. Selecting a patch entry on the left synchronizes the main viewer and right panel on that patch; the right panel shows cell-level trace evidence, including a Cell probability heatmap and a positive-prediction overlay.
 
----
+## 5. Pathology Insight
 
-### B. 主阅片与导航（0:12–0:28）
+- **操作**：打开 **Pathology Insight**，选择一条 **Quick prompt（guided 模式）**。
+- **旁白**：可借助 **Pathology Insight** 围绕当前病例发起追问，获得结构化解读与可复核的分析依据。
+- **译文（EN）**：Pathology Insight supports follow-up questions on the current case, yielding structured interpretations and auditable analytical rationale.
 
-**画面**  
-- 光标移到 **中间主视图**：**滚轮缩放** 一次（略放大），再 **拖动漫游** 一小块组织区域（约 3–4 秒）。
-- 移左下角或左侧 **Navigation Overview（缩略图 + 黄框）**：**点击缩略图远端** 一次，主视图 **跳转到另一区域**（约 4 秒）。
-
-**口播要点**  
-> 「主视图支持缩放平移；缩略导航上的视口框与点击跳转，用来快速跨越切片上的远距离区域。」
-
-**注意**  
-- 不要单击放大（系统设计为单击不放大）；用滚轮缩放。
-
----
-
-### C. TPS 分布与图库联动（0:28–0:45）
-
-**画面**  
-- 视口稍缩或平移，使 **中下方 TPS 分布总览** 完整在画面内（含直方图 + **TPS Allocation** 彩色条）。
-- 用鼠标 **点击直方图某一档背景色带**（例如高表达档），观察左侧 **Patch 图库** 列表变为该档 patch（约 5 秒）。
-- **再点另一档** 或点图例恢复浏览，展示联动（约 3 秒）。
-
-**口播要点**  
-> 「下方总览把 patch 按 TPS 做直方图和临床分档占比；点击档位会驱动左侧图库只显示该档 patch，便于从高表达区开始抽查。」
-
-**注意**  
-- 若图库在下半区需轻微滚动左栏，动作放慢让观众跟上。
-
----
-
-### D. ROI 与统计（0:45–1:02）
-
-**画面**  
-- 在主视图工具栏 **开启 ROI 绘制模式**，在组织上 **拖出一个矩形**；释放后观察矩形吸附到 patch 网格（约 5 秒）。
-- 目光引导到总览内 **Selection ROI**：**Mean TPS、Patches/Cells 相对全片、阴阳性条** 变化（约 4 秒）。
-- 看直方图是否切到 **ROI 内分布**（与全片柱切换）；左栏图库若为 ROI 筛选，可点一条 patch（不必飞行，下一节再飞）（约 3 秒）。
-
-**口播要点**  
-> 「框选局部 ROI 后，统计面板和直方图切换到选区内；图库也可只看与 ROI 相交的 patch，支持对照局部与全片。」
-
-**注意**  
-- 若 ROI 内 patch 过少导致柱很矮，提前选组织较密的区域框选。
-
----
-
-### E. Patch 与右侧详情（1:02–1:18）
-
-**画面**  
-- **清除 ROI**（面板角 × 或工具栏清空），让图库恢复全片或当前档列表（约 2 秒）。
-- 在 **Patch 图库** 点击 **一条中高 TPS** 的条目：主视图 **飞行定位** 到该 patch，右侧 **预览带** 与 **详情** 更新（约 6 秒）。
-- 快速演示 **右侧图层开关**（若有）：例如开关 cell / heatmap overlay（约 3 秒）。若 UI 较隐蔽，可只停预览 zoom 一下。
-
-**口播要点**  
-> 「点击图库会在主视图上定位到对应 patch；右侧是多图层预览和细胞级计数，阈值滑条会参与统计——与总览和 Agent 上下文一致。」
-
-**注意**  
-- 若 `threshold` 在界面某处，可 **轻拖一下** 再复位，口播一句「交互阈值」即可，不必深讲。
-
----
-
-### F. 收尾亮点（1:18–1:30，二选一）
-
-**变体 F1 — 热力图（无 API 依赖）**  
-- 打开工具栏 **TPS 热力图** 开关，主视图上出现 KDE 叠加；**平移一小段** 让观众看到冷暖变化（约 8 秒）。  
-- **口播**：> 「可叠加 TPS 空间密度热力图，辅助看热点在哪一块。」  
-- 最后 **1 秒** 定格在全界面或关热力图回到清爽画面。
-
-**变体 F2 — Pathology Insight（guided）**  
-- 点击右下角 **机器人 FAB**，拖一下面板避免挡字（可选）。  
-- 点一条 **Quick prompt**（如 *Summarize TPS for this whole slide*），**1 秒内**出现结构化英文答复（约 8 秒）。  
-- **口播**：> 「Guided 问答基于当前病例内部统计快照填空，不依赖大模型 key。」  
-- 勿在 90 s 内等流式长回复；选最短一条 prompt。
-
----
-
-## 录屏技术备忘
-
-- **分辨率**：1920×1080 或 1600×900；缩放 100%，避免模糊。  
-- **鼠标**：开大指针/点击高亮（OBS / Windows 自带）。  
-- **节奏**：每段宁可 **少说话、多展示**；口播跟不上可先静音后期配音。  
-- **失败预案**：某步卡顿则 **跳过 F 段**，在 E 段多停 2 秒展示右侧详情。
-
----
-
-## 90 秒检查清单（录前打勾）
-
-- [ ] 首页无自动数据；**已点击导入**且病例列表与主视图已加载  
-- [ ] 主视图能缩放、缩略图能跳转  
-- [ ] 直方图点击能改图库分档  
-- [ ] ROI 能画、能清  
-- [ ] 图库点击能飞行、右侧有数  
-- [ ] （可选）热力图或 Agent guided 其一  
-
----
-
-*与 `docs/网站功能模块说明.md` 模块命名一致；若界面改版，请同步改本脚本中的控件称呼。*

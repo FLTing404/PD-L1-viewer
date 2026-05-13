@@ -61,13 +61,13 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
       )}
     >
       {!isUser ? (
-        <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-          <Bot className="size-3.5" />
+        <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+          <Bot className="size-3" />
         </div>
       ) : null}
       <div
         className={cn(
-          "max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed",
+          "max-w-[85%] rounded-xl px-2.5 py-1.5 text-[0.59rem] leading-snug",
           isUser
             ? "rounded-br-sm bg-primary text-primary-foreground"
             : "rounded-bl-sm bg-muted/60 text-foreground",
@@ -371,19 +371,27 @@ export function AiAssistantChatBody({
   return (
     <Card
       className={cn(
-        "flex h-full min-h-0 flex-1 flex-col gap-2 py-3",
+        "flex flex-col gap-1.5 py-2.5",
+        hideChrome
+          ? "h-auto min-h-0 w-full shrink-0 bg-transparent shadow-none"
+          : "flex h-full min-h-0 flex-1 flex-col",
         className,
       )}
     >
-      <CardContent className="flex h-full min-h-0 flex-col gap-2 px-3">
+      <CardContent
+        className={cn(
+          "flex flex-col gap-1.5 px-2.5",
+          hideChrome ? "h-auto min-h-0" : "h-full min-h-0",
+        )}
+      >
         {!hideChrome ? (
           <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide">
-              <Sparkles className="size-3.5 text-primary" />
+            <span className="flex items-center gap-1.5 text-[0.59rem] font-semibold tracking-wide">
+              <Sparkles className="size-3 text-primary" />
               Pathology Insight
             </span>
             <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1 text-[12px] text-emerald-400">
+              <span className="flex items-center gap-1 text-[9px] text-emerald-400">
                 <span
                   className={cn(
                     "size-1.5 rounded-full",
@@ -399,7 +407,7 @@ export function AiAssistantChatBody({
                   title="Clear chat"
                   className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted"
                 >
-                  <RotateCcw className="size-3" />
+                  <RotateCcw className="size-2.5" />
                 </button>
               ) : null}
             </div>
@@ -412,27 +420,37 @@ export function AiAssistantChatBody({
               title="Clear chat"
               className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted"
             >
-              <RotateCcw className="size-3" />
+              <RotateCcw className="size-2.5" />
             </button>
           </div>
         ) : null}
 
         <div
           ref={scrollRef}
-          className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1 text-xs"
+          className={cn(
+            "space-y-2 pr-1 text-[0.59rem] leading-snug",
+            hideChrome
+              ? "max-h-[calc(80vh-9rem)] min-h-[100px] shrink-0 overflow-y-auto"
+              : "flex-1 min-h-0 overflow-y-auto",
+          )}
         >
           {!hasMessages ? (
-            <div className="flex h-full flex-col gap-3">
-              <div className="flex items-start gap-2 rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
-                <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-                  <Bot className="size-3.5" />
+            <div
+              className={cn(
+                "flex flex-col gap-2",
+                hideChrome ? "min-h-[200px]" : "h-full",
+              )}
+            >
+              <div className="flex items-start gap-2 rounded-xl bg-muted/40 p-2.5 text-[0.59rem] text-muted-foreground">
+                <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                  <Bot className="size-3" />
                 </div>
-                <p className="leading-relaxed">
+                <p className="leading-snug">
                   Hello. I&apos;m your TPS-Vis assistant—I can help you navigate the slide, summarize ROIs, or pull patch- and cell-level stats from the pipeline. Which case should we look at?
                 </p>
               </div>
-              <div className="space-y-1.5">
-                <span className="text-[12px] uppercase tracking-wider text-muted-foreground">
+              <div className="space-y-1">
+                <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
                   Quick prompts
                 </span>
                 {guidedQuestions.map((q) => (
@@ -440,7 +458,7 @@ export function AiAssistantChatBody({
                     key={q.id}
                     type="button"
                     onClick={() => void sendGuided(q.id, q.label)}
-                    className="block w-full rounded-md bg-muted/40 px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    className="block w-full rounded-md bg-muted/40 px-2 py-1.5 text-left text-[0.59rem] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   >
                     {q.label}
                   </button>
@@ -453,7 +471,7 @@ export function AiAssistantChatBody({
         </div>
 
         {error && status !== "streaming" ? (
-          <div className="rounded-md bg-destructive/10 px-2 py-1 text-[12px] text-destructive">
+          <div className="rounded-md bg-destructive/10 px-2 py-1 text-[9px] text-destructive">
             {error}
           </div>
         ) : null}
@@ -466,13 +484,13 @@ export function AiAssistantChatBody({
             placeholder="Ask anything about this case…"
             rows={1}
             disabled={status === "streaming"}
-            className="flex-1 resize-none rounded-md border border-border bg-background px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+            className="flex-1 resize-none rounded-md border border-border bg-background px-2 py-1.5 text-[0.59rem] leading-snug outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
           />
           {status === "streaming" ? (
             <button
               type="button"
               onClick={handleStop}
-              className="rounded-md bg-destructive px-2 py-1.5 text-xs font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
+              className="rounded-md bg-destructive px-2 py-1.5 text-[0.59rem] font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
               title="Stop"
             >
               Stop
@@ -484,7 +502,7 @@ export function AiAssistantChatBody({
               className="rounded-md bg-primary p-1.5 text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
               title="Send"
             >
-              <Send className="size-3.5" />
+              <Send className="size-3" />
             </button>
           )}
         </form>

@@ -132,6 +132,11 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** Same ordering as `SpecimenExplorer` (`casesByTpsDesc`) so the default selection matches the first card. */
+function sortCasesByMeanTpsDesc(cases: CaseSummary[]): CaseSummary[] {
+  return [...cases].sort((a, b) => b.meanPatchTps - a.meanPatchTps);
+}
+
 export const useViewerStore = create<ViewerState>((set, get) => ({
   caseList: [],
   caseListStatus: "idle",
@@ -174,7 +179,8 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
       set({ caseList: data.cases, caseListStatus: "ready" });
       const { caseId } = get();
       if (!caseId && data.cases.length > 0) {
-        await get().setCase(data.cases[0].caseId);
+        const firstInExplorerOrder = sortCasesByMeanTpsDesc(data.cases)[0];
+        await get().setCase(firstInExplorerOrder.caseId);
       }
     } catch (err) {
       set({ caseListStatus: "error", caseListError: String(err) });
