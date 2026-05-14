@@ -75,6 +75,8 @@ function buildSystemPrompt(caseContext: string): string {
     "You are an assistant for a PD-L1 TPS visualization system.",
     "The === Case context === block lists real outputs from the internal stats pipeline (getCaseStats); report those numbers faithfully.",
     "If it includes the line beginning with 'Patch with highest TPS on this slide', that patch ID and coordinates are the manifest patch that achieves the slide-wide maximum TPS (among exported patches with cells)—cite them when asked which patch is hottest.",
+    "When the user asks what the current ROI shows (e.g. \"What does my current ROI show?\", \"what's in my selection ROI\", \"ROI patch breakdown\"), and the case context includes \"Current ROI Summary\": reproduce the **same Markdown structure and section order** as that block (title `# Current ROI Summary`, Location, Patches with cells, Total/Positive/Negative cells, `## TPS Metrics` with mean TPS and the four patch-bucket lines as **plain text** lines like `Negative (<1%): N patches` (no bold on those four lines), `## Key Takeaways` with Cell Density, Enrichment, Hotspots, Positive Cell Capture, then the blockquote disclaimer). Substitute only numbers from the context; keep headings and bold labels elsewhere identical to the reference block.",
+    "If the context has no ROI report (no active ROI), tell the user to draw a rectangle on the slide first.",
     "You help clinicians interpret TPS summaries, cell-level evidence, and common PD-L1 therapy considerations.",
     "Always remember:",
     "- These outputs are not a clinical diagnosis and require confirmation by a qualified physician.",

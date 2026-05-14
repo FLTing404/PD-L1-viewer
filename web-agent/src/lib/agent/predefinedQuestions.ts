@@ -26,18 +26,7 @@ These values are produced by this viewer’s pipeline (same rules as the charts)
   {
     id: "selection_roi_summary",
     label: "What does my current ROI show?",
-    template: `Here’s the ROI summary (same logic as the Selection ROI panel):
-
-- **ROI active**: {{hasRoi}}
-- **Snapped rectangle (WSI coords)**: x={{roiX}}, y={{roiY}}, w={{roiW}}, h={{roiH}}
-- **Patches (cells>0 in ROI)**: {{roiPatchCount}} · **Blank grid slots (no export)**: {{roiSynthPatchCount}}
-- **Cells** · total {{roiTotalCells}} · positive {{roiPosCells}} · negative {{roiNegCells}}
-- **Cell-weighted mean TPS in ROI**: {{roiMeanTpsPct}}%
-- **Patch buckets (with cells)**: Neg {{roiBucketNeg}}, 1–9% {{roiBucket1}}, 10–49% {{roiBucket10}}, ≥50% {{roiBucket50}}
-
-**These metrics are not a clinical diagnosis—physician confirmation is required.**
-
-If no ROI is active, draw a box on the slide first and try again.`,
+    template: `{{roiReportMarkdown}}`,
   },
   {
     id: "selected_patch_detail",

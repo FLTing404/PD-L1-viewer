@@ -214,6 +214,113 @@ export async function getCaseStats(
   };
 }
 
+/** Axis-aligned overlap: patch footprint vs ROI rectangle (WSI px). */
+function patchIntersectsWorldRect(
+  patch: { px: number; py: number; width: number; height: number },
+  roi: WorldRect,
+): boolean {
+  const rx2 = roi.x + roi.w;
+  const ry2 = roi.y + roi.h;
+  const px2 = patch.px + patch.width;
+  const py2 = patch.py + patch.height;
+  return !(
+    patch.px >= rx2 || px2 <= roi.x || patch.py >= ry2 || py2 <= roi.y
+  );
+}
+
+function fmtCountEn(n: number): string {
+  return Number.isFinite(n) ? Math.round(n).toLocaleString("en-US") : "—";
+}
+
+function coordInt(n: number): string {
+  return String(Math.round(n));
+}
+
+/**
+ * Fixed-layout Markdown for guided "What does my current ROI show?" — only numbers change.
+ */
+export function buildRoiReportMarkdown(s: CaseStatsSnapshot): string {
+  const r = s.roi;
+  if (!r) {
+    return "_No active ROI — draw a rectangle on the slide first, then use this quick prompt again._";
+  }
+
+  const { snapped, summary } = r;
+  const roiMean = formatTpsPercentDigits(r.meanTpsInRoi);
+  const wsiMean = formatTpsPercentDigits(s.wsi.meanTps);
+  const bc = r.bucketCounts;
+
+  const pct = (part: number, whole: number) =>
+    whole > 0 ? Math.round((100 * part) / whole) : 0;
+  const roiCellsPct = pct(summary.totalCells, s.wsi.totalCells);
+  const roiPosCapturePct =
+    s.wsi.positiveCells > 0
+      ? Math.round((100 * summary.positiveCells) / s.wsi.positiveCells)
+      : 0;
+
+  const d = r.meanTpsInRoi - s.wsi.meanTps;
+  let enrichment: string;
+  if (d > 0.02) {
+    enrichment = `**Enrichment:** The cell-weighted mean TPS of **${roiMean}%** is significantly higher than the slide-wide mean of **${wsiMean}%**, indicating this specific region is enriched for PD-L1 positivity.`;
+  } else if (d < -0.02) {
+    enrichment = `**Enrichment:** The cell-weighted mean TPS of **${roiMean}%** is lower than the slide-wide mean of **${wsiMean}%**, indicating this region is comparatively less PD-L1–enriched than the rest of the slide.`;
+  } else {
+    enrichment = `**Enrichment:** The cell-weighted mean TPS of **${roiMean}%** is close to the slide-wide mean of **${wsiMean}%**.`;
+  }
+
+  const h = s.wsiHighestTpsPatch;
+  const n50fmt = fmtCountEn(bc.TPS_50);
+  let hotspots: string;
+  if (h && patchIntersectsWorldRect(h, snapped)) {
+    hotspots = `**Hotspots:** Over **${n50fmt}** patches in the ROI have a TPS ≥50%. The hottest patch on the entire slide (**${formatTpsPercentDigits(h.patchPredTps)}%** TPS) is located within this ROI at coordinates **x=${coordInt(h.px)}, y=${coordInt(h.py)}**.`;
+  } else if (h) {
+    hotspots = `**Hotspots:** Over **${n50fmt}** patches in the ROI have a TPS ≥50%. The hottest patch on the entire slide (**${formatTpsPercentDigits(h.patchPredTps)}%** TPS) is located outside this ROI (coordinates **x=${coordInt(h.px)}, y=${coordInt(h.py)}**).`;
+  } else {
+    hotspots = `**Hotspots:** Over **${n50fmt}** patches in the ROI have a TPS ≥50%.`;
+  }
+
+  const posCapture =
+    s.wsi.positiveCells > 0
+      ? `**Positive Cell Capture:** The ROI captures roughly **${roiPosCapturePct}%** of all positive cells found on the entire slide (${fmtCountEn(summary.positiveCells)} of ${fmtCountEn(s.wsi.positiveCells)} total).`
+      : `**Positive Cell Capture:** Whole-slide positive-cell count is zero in the current roll-up; ROI positive cells = **${fmtCountEn(summary.positiveCells)}**.`;
+
+  const cellDensity = `**Cell Density:** The ROI contains about **${roiCellsPct}%** of all cells on the slide (${fmtCountEn(summary.totalCells)} out of ${fmtCountEn(s.wsi.totalCells)} total).`;
+
+  return [
+    "# Current ROI Summary",
+    "",
+    `**Location (snapped):** x=${coordInt(snapped.x)}, y=${coordInt(snapped.y)}, width=${coordInt(snapped.w)}, height=${coordInt(snapped.h)}`,
+    "",
+    `**Patches with cells:** ${fmtCountEn(summary.patchCount)} (${fmtCountEn(summary.syntheticPatchCount)} blank grid slots were excluded).`,
+    "",
+    `**Total cells:** ${fmtCountEn(summary.totalCells)}`,
+    "",
+    `**Positive cells:** ${fmtCountEn(summary.positiveCells)}`,
+    "",
+    `**Negative cells:** ${fmtCountEn(summary.negativeCells)}`,
+    "",
+    "## TPS Metrics",
+    "",
+    `**Mean TPS (cell-weighted):** ${roiMean}%`,
+    "",
+    "**Patch bucket distribution (cells > 0):**",
+    "",
+    `Negative (<1%): ${fmtCountEn(bc.Negative)} patches<br />1–9% TPS: ${fmtCountEn(bc.TPS_1)} patches<br />10–49% TPS: ${fmtCountEn(bc.TPS_10)} patches<br />≥50% TPS: ${fmtCountEn(bc.TPS_50)} patches`,
+    "",
+    "## Key Takeaways",
+    "",
+    cellDensity,
+    "",
+    enrichment,
+    "",
+    hotspots,
+    "",
+    posCapture,
+    "",
+    "> ⚠️ *These are quantitative observations from the automated analysis pipeline. Clinical interpretation and treatment decisions require physician review of the full histology and correlation with other clinical findings.*",
+  ].join("\n");
+}
+
 /** 将快照转为模板填空字段 */
 export function caseStatsToTemplateFields(s: CaseStatsSnapshot): TemplateFields {
   const bc = s.wsi.bucketCounts;
@@ -328,7 +435,12 @@ export function caseStatsToTemplateFields(s: CaseStatsSnapshot): TemplateFields 
         roiH: "—",
       };
 
-  return { ...base, ...patchBlock, ...roiBlock };
+  return {
+    ...base,
+    ...patchBlock,
+    ...roiBlock,
+    roiReportMarkdown: buildRoiReportMarkdown(s),
+  };
 }
 
 /** 供 DeepSeek 系统提示注入：与内部快照一致的可读文本（非 JSON，便于模型阅读） */
@@ -394,9 +506,23 @@ export function formatCaseStatsForPrompt(s: CaseStatsSnapshot): string {
     lines.push(
       `  - Mean TPS in ROI (cell-weighted): ${formatTpsPercentDigits(s.roi.meanTpsInRoi)}%`,
     );
+    const bc = s.roi.bucketCounts;
     lines.push(
-      `  - Patch buckets (cells>0): Neg=${s.roi.bucketCounts.Negative}, 1–9%=${s.roi.bucketCounts.TPS_1}, 10–49%=${s.roi.bucketCounts.TPS_10}, ≥50%=${s.roi.bucketCounts.TPS_50}`,
+      "  - Patches in ROI by clinical TPS band (exported patches with cells; Selection ROI tooltip format):",
     );
+    lines.push(
+      [
+        `    Negative (<1%): ${bc.Negative} patches`,
+        `    1–9% TPS: ${bc.TPS_1} patches`,
+        `    10–49% TPS: ${bc.TPS_10} patches`,
+        `    ≥50% TPS: ${bc.TPS_50} patches`,
+      ].join("\n"),
+    );
+    lines.push("");
+    lines.push(
+      "### Pathology Insight — Current ROI Summary (Markdown; same output as guided quick prompt)",
+    );
+    lines.push(buildRoiReportMarkdown(s));
   }
 
   return lines.join("\n");
