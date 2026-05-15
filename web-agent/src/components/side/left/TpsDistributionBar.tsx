@@ -15,7 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useViewerStore } from "@/lib/store";
-import { BUCKET_STYLES, type BucketStyle } from "@/lib/bucket";
+import { BUCKET_ORDER_LTR, BUCKET_STYLES, type BucketStyle } from "@/lib/bucket";
 import type { PatchBucket } from "@/types/case";
 import { patchesIntersectingRect } from "@/lib/localRoiStats";
 import {
@@ -52,7 +52,7 @@ const BAND_SURFACE: Record<PatchBucket, string> = {
   TPS_50: "#3d1018",
 };
 
-const BAND_BUCKETS: PatchBucket[] = ["Negative", "TPS_1", "TPS_10", "TPS_50"];
+const BAND_BUCKETS = BUCKET_ORDER_LTR;
 
 const EMPTY_BUCKET_COUNTS: Record<PatchBucket, number> = {
   Negative: 0,

@@ -7,18 +7,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { patchesWithCellsForTps } from "@/lib/patchFilters";
-import { BUCKET_STYLES } from "@/lib/bucket";
-import { countPatchesByBucket } from "@/lib/tpsHistogram";
+import { BUCKET_ORDER_LTR, BUCKET_STYLES } from "@/lib/bucket";
+import {
+  countPatchesByBucket,
+  displayBucketPercentsOneDecimalSum100,
+  sanitizeBucketCounts,
+  sumBucketCounts,
+} from "@/lib/tpsHistogram";
 import type { CaseManifest, PatchBucket } from "@/types/case";
 import { cn } from "@/lib/utils";
 
-/** Left → right on strip: TPS<1% … TPS>50% (matches proportional TPS axis). */
-const STRIP_BUCKETS_LTR: PatchBucket[] = [
-  "Negative",
-  "TPS_1",
-  "TPS_10",
-  "TPS_50",
-];
+const STRIP_BUCKETS_LTR = BUCKET_ORDER_LTR;
 
 /** Min band pixel width for one-line `count (pct%)`; narrower bands hide label → hover tooltip. */
 const INLINE_LABEL_MIN_PX = 52;
@@ -52,7 +51,6 @@ export function HilbertSpatialStrip({
   scope?: HilbertStripScope;
 }) {
   void _densityTraceLegend;
-  void patchTotalDisplay;
   const patches = patchesWithCellsForTps(manifest.patches);
 
   const wsBucketCounts = useMemo(
@@ -60,11 +58,10 @@ export function HilbertSpatialStrip({
     [patches],
   );
 
-  const bucketCounts = distributionCounts ?? wsBucketCounts;
-  const total = useMemo(
-    () => STRIP_BUCKETS_LTR.reduce((s, b) => s + bucketCounts[b], 0),
-    [bucketCounts],
-  );
+  /** Sanitize + same denominator \(N_{\mathrm{tot}}\) as proportional axis / paper. */
+  const bucketCounts = sanitizeBucketCounts(distributionCounts ?? wsBucketCounts);
+  const total = sumBucketCounts(bucketCounts);
+  const displayPct = displayBucketPercentsOneDecimalSum100(bucketCounts, total);
 
   const nWs = patches.length;
 
@@ -99,8 +96,8 @@ export function HilbertSpatialStrip({
 
   const ariaStrip =
     scope === "roi_selection"
-      ? "选区内 TPS 占比 — 从左到右为小于1%、1–10%、10–50%、大于50%；悬停各区可看占比"
-      : "全图 TPS 占比 — 从左到右为小于1%、1–10%、10–50%、大于50%；悬停各区可看占比";
+      ? "选区内 TPS 占比 — 从左到右为 <1%、1–9%、10–49%、≥50%；悬停各区可看占比"
+      : "全图 TPS 占比 — 从左到右为 <1%、1–9%、10–49%、≥50%；悬停各区可看占比";
 
   return (
     <div
@@ -111,6 +108,11 @@ export function HilbertSpatialStrip({
         <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/95">
           TPS Allocation Band
         </div>
+        {patchTotalDisplay != null && Number.isFinite(patchTotalDisplay) ? (
+          <div className="shrink-0 text-[9px] tabular-nums text-muted-foreground/90">
+            N_tot={Math.round(patchTotalDisplay).toLocaleString()}
+          </div>
+        ) : null}
       </div>
       <div
         ref={stripRef}
@@ -121,7 +123,7 @@ export function HilbertSpatialStrip({
         {/* DOM bands (reliable colour); canvas was easy to miss paint vs dark chrome */}
         <div className="absolute inset-0 z-0 flex h-full min-h-[26px] w-full">
           {STRIP_BUCKETS_LTR.map((b: PatchBucket) => {
-            const c = Math.max(0, bucketCounts[b]);
+            const c = bucketCounts[b];
             return (
               <div
                 key={`band-${b}`}
@@ -141,7 +143,7 @@ export function HilbertSpatialStrip({
           {STRIP_BUCKETS_LTR.map((b: PatchBucket) => {
             const style = BUCKET_STYLES[b];
             const c = bucketCounts[b];
-            const pct = total > 0 ? (100 * c) / total : 0;
+            const pct = displayPct[b] ?? 0;
             const cRounded = Math.max(0, Math.round(c));
             /** Use Infinity until measured so SSR / first render prefers inline labels (avoids tooltip flash). */
             const bandPxW =
@@ -150,7 +152,7 @@ export function HilbertSpatialStrip({
             const compactLabel = `${cRounded.toLocaleString()} (${pct.toFixed(1)}%)`;
             const ariaLabel = `${style.fullLabel}: ${compactLabel}`;
             const sharedBtnStyle: React.CSSProperties = {
-              flexGrow: Math.max(0, c),
+              flexGrow: c,
               flexBasis: 0,
               minWidth: c > 0 ? 4 : 0,
             };

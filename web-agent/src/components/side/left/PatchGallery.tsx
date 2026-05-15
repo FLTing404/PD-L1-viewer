@@ -10,6 +10,7 @@ import {
   useViewerStore,
 } from "@/lib/store";
 import { BUCKET_STYLES } from "@/lib/bucket";
+import { patchBucketFromPredTps } from "@/lib/tpsHistogram";
 import { formatPatchOriginXY } from "@/lib/patchDisplay";
 import { caseFileRelativeUrl } from "@/lib/patchPreviewUrl";
 import type { PatchEntry } from "@/types/case";
@@ -47,7 +48,7 @@ export function PatchGallery({
 
   const filtered: PatchEntry[] = useMemo(() => {
     const base = patchesWithCellsForTps(manifest?.patches ?? []).filter(
-      (p) => p.patchPredBucket === galleryBucket,
+      (p) => patchBucketFromPredTps(p.patchPredTps) === galleryBucket,
     );
     if (!roiPatchIdSet) return base;
     return base.filter((p) => roiPatchIdSet.has(p.patchId));
@@ -109,7 +110,7 @@ export function PatchGallery({
               const thumbUrl = caseId
                 ? caseFileRelativeUrl(caseId, p.imageFile)
                 : "";
-              const bucketStyle = BUCKET_STYLES[p.patchPredBucket];
+              const bucketStyle = BUCKET_STYLES[patchBucketFromPredTps(p.patchPredTps)];
               const xyLabel = formatPatchOriginXY(p);
               return (
                 <button
@@ -176,7 +177,7 @@ export function PatchGallery({
                 const thumbUrl = caseId
                   ? caseFileRelativeUrl(caseId, p.imageFile)
                   : "";
-                const bucketStyle = BUCKET_STYLES[p.patchPredBucket];
+                const bucketStyle = BUCKET_STYLES[patchBucketFromPredTps(p.patchPredTps)];
                 return (
                   <button
                     key={p.patchId}

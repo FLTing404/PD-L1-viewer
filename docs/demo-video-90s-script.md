@@ -27,7 +27,7 @@
 
 - **操作**：在患者侧两块相邻组织岛上 **依次** 框选 ROI；释放后矩形**吸附至 patch 网格**；每次框选后查看 **TPS 分布总览**、**Selection ROI** 嵌入统计及图库中与 ROI 相关的分档与列表。
 - **旁白**：依次框选后，系统对各自 ROI 内有效 patch 进行 TPS 可视化与统计输出。就本演示病例而言，患者侧汇总层面 TPS 约 **35.7%**（接近关键临床边界），而两块 ROI 的局部结果极度分化：**约 61.2%** 与 **约 13.9%**，凸显「全局边界读数」与「局部异质」并存的风险。
-- **译文（EN）**：Draw ROIs on the two adjacent patient islands in sequence; after grid snap, review the TPS overview, embedded Selection ROI stats, and gallery linkage. 
+- **译文（EN）**：Draw ROIs on the two adjacent patient islands in sequence; after grid s. 
 In this demo case, the biopsy is split into two regions showing sharp heatmap contrast.
 The overall TPS sits at around 35.7 percent, right at the borderline level. 
 Meanwhile the local region of interest values differ dramatically, 

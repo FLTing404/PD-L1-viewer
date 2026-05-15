@@ -12,6 +12,7 @@ import type {
   WorldRect,
 } from "@/lib/localRoiStats";
 import { patchesWithCellsForTps } from "@/lib/patchFilters";
+import { countPatchesByBucket } from "@/lib/tpsHistogram";
 
 export type PanelLayer = "cell_class" | "center_prob" | "heatmap_overlay";
 
@@ -364,13 +365,9 @@ export function computeWsiStats(manifest: CaseManifest | null): WsiStats {
       negativeCells: 0,
     };
   }
-  const buckets: Record<string, number> = {
-    TPS_50: 0,
-    TPS_10: 0,
-    TPS_1: 0,
-    Negative: 0,
-  };
   const forTps = patchesWithCellsForTps(manifest.patches);
+  /** Same rule as histogram / allocation strip: bucket from scalar TPS, not CSV `patch_pred_bucket`. */
+  const bucketCounts = countPatchesByBucket(forTps);
 
   let totalCells = 0;
   let positiveCells = 0;
@@ -386,14 +383,13 @@ export function computeWsiStats(manifest: CaseManifest | null): WsiStats {
   for (const p of forTps) {
     tpsSum += p.patchPredTps;
     if (p.patchPredTps > tpsMax) tpsMax = p.patchPredTps;
-    buckets[p.patchPredBucket] = (buckets[p.patchPredBucket] ?? 0) + 1;
   }
   return {
     patchCount: forTps.length,
     totalCells,
     meanTps: forTps.length === 0 ? 0 : tpsSum / forTps.length,
     maxTps: forTps.length === 0 ? 0 : tpsMax,
-    bucketCounts: buckets,
+    bucketCounts: bucketCounts as Record<string, number>,
     positiveCells,
     negativeCells,
   };

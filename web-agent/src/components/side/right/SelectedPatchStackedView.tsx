@@ -12,6 +12,7 @@ import {
   type PanelLayer,
 } from "@/lib/store";
 import { BUCKET_STYLES } from "@/lib/bucket";
+import { patchBucketFromPredTps } from "@/lib/tpsHistogram";
 import type { PatchEntry } from "@/types/case";
 import { formatPatchOriginXY } from "@/lib/patchDisplay";
 import { patchPreviewFileUrlFromEntry } from "@/lib/patchPreviewUrl";
@@ -57,8 +58,9 @@ function PatchCellStatsInline({ className }: { className?: string }) {
   const wsiDen = wsiStats.totalCells;
 
   const predTps = patch ? clamp(patch.patchPredTps, 0, 1) : 0;
-  const bucketStyle = patch ? BUCKET_STYLES[patch.patchPredBucket] : null;
-  const bucketLabel = bucketStyle?.label ?? "—";
+  const bucket = patch ? patchBucketFromPredTps(patch.patchPredTps) : null;
+  const bucketStyle = bucket ? BUCKET_STYLES[bucket] : null;
+  const bucketLabel = bucketStyle?.fullLabel ?? "—";
 
   const mixTotal = Math.max(1, stats.positive + stats.negative);
   const mixPosPct = (stats.positive / mixTotal) * 100;

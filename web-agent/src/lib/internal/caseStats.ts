@@ -6,6 +6,11 @@ import {
 import { loadCaseManifest, resolveCellsCsvPath } from "@/lib/data/parseManifest";
 import { loadCells } from "@/lib/data/parseCells";
 import { computeCellStats, computeWsiStats, type WsiStats } from "@/lib/store";
+import {
+  BUCKET_RANGE_LABELS,
+  formatPatchBucketDistributionLine,
+  formatPatchBucketLabel,
+} from "@/lib/bucket";
 import { countPatchesByBucket } from "@/lib/tpsHistogram";
 import { patchesWithCellsForTps } from "@/lib/patchFilters";
 import {
@@ -114,7 +119,7 @@ async function loadPatchDetail(
   }
   return {
     patchId: patch.patchId,
-    patchPredBucket: patch.patchPredBucket,
+    patchPredBucket: formatPatchBucketLabel(patch.patchPredBucket),
     patchPredTps: patch.patchPredTps,
     numCells: patch.numCells,
     px: patch.px,
@@ -140,7 +145,7 @@ function pickHighestPredTpsPatch(patches: PatchEntry[]): PatchEntry | null {
 function toHighestPayload(p: PatchEntry): HighestTpsPatchPayload {
   return {
     patchId: p.patchId,
-    patchPredBucket: p.patchPredBucket,
+    patchPredBucket: formatPatchBucketLabel(p.patchPredBucket),
     patchPredTps: p.patchPredTps,
     px: p.px,
     py: p.py,
@@ -303,9 +308,14 @@ export function buildRoiReportMarkdown(s: CaseStatsSnapshot): string {
     "",
     `**Mean TPS (cell-weighted):** ${roiMean}%`,
     "",
-    "**Patch bucket distribution (cells > 0):**",
+    `**Patch bucket distribution (cells > 0):**`,
     "",
-    `Negative (<1%): ${fmtCountEn(bc.Negative)} patches<br />1–9% TPS: ${fmtCountEn(bc.TPS_1)} patches<br />10–49% TPS: ${fmtCountEn(bc.TPS_10)} patches<br />≥50% TPS: ${fmtCountEn(bc.TPS_50)} patches`,
+    [
+      formatPatchBucketDistributionLine("Negative", bc.Negative, fmtCountEn),
+      formatPatchBucketDistributionLine("TPS_1", bc.TPS_1, fmtCountEn),
+      formatPatchBucketDistributionLine("TPS_10", bc.TPS_10, fmtCountEn),
+      formatPatchBucketDistributionLine("TPS_50", bc.TPS_50, fmtCountEn),
+    ].join("<br />"),
     "",
     "## Key Takeaways",
     "",
@@ -344,7 +354,9 @@ export function caseStatsToTemplateFields(s: CaseStatsSnapshot): TemplateFields 
           wsiHighestPatchTpsPct: formatTpsPercentDigits(
             s.wsiHighestTpsPatch.patchPredTps,
           ),
-          wsiHighestPatchBucket: s.wsiHighestTpsPatch.patchPredBucket,
+          wsiHighestPatchBucket: formatPatchBucketLabel(
+            s.wsiHighestTpsPatch.patchPredBucket,
+          ),
           wsiHighestPatchPx: String(s.wsiHighestTpsPatch.px),
           wsiHighestPatchPy: String(s.wsiHighestTpsPatch.py),
         }
@@ -362,7 +374,7 @@ export function caseStatsToTemplateFields(s: CaseStatsSnapshot): TemplateFields 
     ? {
         hasPatch: "Yes",
         patchId: p.patchId,
-        patchBucket: p.patchPredBucket,
+        patchBucket: formatPatchBucketLabel(p.patchPredBucket),
         patchTpsPct: formatTpsPercentDigits(p.patchPredTps),
         patchNumCells: String(p.numCells),
         patchPx: String(p.px),
@@ -456,11 +468,11 @@ export function formatCaseStatsForPrompt(s: CaseStatsSnapshot): string {
   if (s.wsiHighestTpsPatch) {
     const h = s.wsiHighestTpsPatch;
     lines.push(
-      `Patch with highest TPS on this slide: ${h.patchId} at ${formatTpsPercentDigits(h.patchPredTps)}% (bucket ${h.patchPredBucket}; WSI coords px=${h.px}, py=${h.py}; patch size ${h.width}×${h.height})`,
+      `Patch with highest TPS on this slide: ${h.patchId} at ${formatTpsPercentDigits(h.patchPredTps)}% (bucket ${formatPatchBucketLabel(h.patchPredBucket)}; WSI coords px=${h.px}, py=${h.py}; patch size ${h.width}×${h.height})`,
     );
   }
   lines.push(
-    `Bucket distribution: TPS_50=${s.wsi.bucketCounts.TPS_50 ?? 0}, TPS_10=${s.wsi.bucketCounts.TPS_10 ?? 0}, TPS_1=${s.wsi.bucketCounts.TPS_1 ?? 0}, Negative=${s.wsi.bucketCounts.Negative ?? 0}`,
+    `Bucket distribution: ${BUCKET_RANGE_LABELS.TPS_50}=${s.wsi.bucketCounts.TPS_50 ?? 0}, ${BUCKET_RANGE_LABELS.TPS_10}=${s.wsi.bucketCounts.TPS_10 ?? 0}, ${BUCKET_RANGE_LABELS.TPS_1}=${s.wsi.bucketCounts.TPS_1 ?? 0}, ${BUCKET_RANGE_LABELS.Negative}=${s.wsi.bucketCounts.Negative ?? 0}`,
   );
   lines.push(`Export threshold: ${s.exportThresholdUsedForLabels}`);
   if (s.bestCellThresholdFromModel != null) {
@@ -474,7 +486,7 @@ export function formatCaseStatsForPrompt(s: CaseStatsSnapshot): string {
   if (p) {
     lines.push("");
     lines.push(`Selected patch: ${p.patchId}`);
-    lines.push(`  - Bucket: ${p.patchPredBucket}`);
+    lines.push(`  - Bucket: ${formatPatchBucketLabel(p.patchPredBucket)}`);
     lines.push(`  - Patch TPS: ${formatTpsPercentDigits(p.patchPredTps)}%`);
     lines.push(`  - Cell count: ${p.numCells}`);
     lines.push(
@@ -512,10 +524,10 @@ export function formatCaseStatsForPrompt(s: CaseStatsSnapshot): string {
     );
     lines.push(
       [
-        `    Negative (<1%): ${bc.Negative} patches`,
-        `    1–9% TPS: ${bc.TPS_1} patches`,
-        `    10–49% TPS: ${bc.TPS_10} patches`,
-        `    ≥50% TPS: ${bc.TPS_50} patches`,
+        `    ${formatPatchBucketDistributionLine("Negative", bc.Negative)}`,
+        `    ${formatPatchBucketDistributionLine("TPS_1", bc.TPS_1)}`,
+        `    ${formatPatchBucketDistributionLine("TPS_10", bc.TPS_10)}`,
+        `    ${formatPatchBucketDistributionLine("TPS_50", bc.TPS_50)}`,
       ].join("\n"),
     );
     lines.push("");

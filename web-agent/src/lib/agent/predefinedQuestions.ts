@@ -18,7 +18,7 @@ export const PREDEFINED_QUESTIONS: PredefinedQuestion[] = [
 - **Patches counted**: {{wsiPatchCount}} · **Total cells**: {{wsiTotalCells}}
 - **Mean / max patch TPS**: {{wsiMeanTpsPct}}% / {{wsiMaxTpsPct}}%
 - **Highest-TPS patch** (among exported patches with cells): {{wsiHighestPatchId}} at {{wsiHighestPatchTpsPct}}% · bucket {{wsiHighestPatchBucket}} · WSI px={{wsiHighestPatchPx}}, py={{wsiHighestPatchPy}}
-- **Patches by bucket**: Negative {{wsiBucketNeg}}, 1–9% {{wsiBucket1}}, 10–49% {{wsiBucket10}}, ≥50% {{wsiBucket50}}
+- **Patches by bucket**: <1% {{wsiBucketNeg}}, 1–9% {{wsiBucket1}}, 10–49% {{wsiBucket10}}, ≥50% {{wsiBucket50}}
 - **Positive / negative cells** (patch TPS × cell counts): {{wsiPosCells}} / {{wsiNegCells}}
 
 These values are produced by this viewer’s pipeline (same rules as the charts). **They are not a clinical diagnosis—physician confirmation is required.**`,
@@ -77,12 +77,12 @@ These rolls ups weight patch TPS by cell counts across patches.
 
 **Whole slide**
 - Mean patch TPS: {{wsiMeanTpsPct}}% · Patches: {{wsiPatchCount}} · Cells: {{wsiTotalCells}}
-- Buckets: Neg {{wsiBucketNeg}}, 1–9% {{wsiBucket1}}, 10–49% {{wsiBucket10}}, ≥50% {{wsiBucket50}}
+- Buckets: <1% {{wsiBucketNeg}}, 1–9% {{wsiBucket1}}, 10–49% {{wsiBucket10}}, ≥50% {{wsiBucket50}}
 
 **ROI (when active)**
 - Mean TPS in ROI (cell-weighted): {{roiMeanTpsPct}}%
 - Patch slots: {{roiPatchCount}} · Cells: {{roiTotalCells}} · Pos / neg: {{roiPosCells}} / {{roiNegCells}}
-- Buckets: Neg {{roiBucketNeg}}, 1–9% {{roiBucket1}}, 10–49% {{roiBucket10}}, ≥50% {{roiBucket50}}
+- Buckets: <1% {{roiBucketNeg}}, 1–9% {{roiBucket1}}, 10–49% {{roiBucket10}}, ≥50% {{roiBucket50}}
 
 If **ROI active** is No, draw a rectangle on the slide first to populate ROI metrics.
 
@@ -107,7 +107,7 @@ Quick prompts use the threshold slider state plus manifest exports so numbers st
 
 | Band | Count |
 |------|-------|
-| Negative (<1%) | {{wsiBucketNeg}} |
+| <1% | {{wsiBucketNeg}} |
 | 1–9% | {{wsiBucket1}} |
 | 10–49% | {{wsiBucket10}} |
 | ≥50% | {{wsiBucket50}} |

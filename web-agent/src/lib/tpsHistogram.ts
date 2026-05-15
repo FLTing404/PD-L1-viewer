@@ -27,6 +27,73 @@ export function countPatchesByBucket(
   return out;
 }
 
+const BUCKET_ORDER: PatchBucket[] = ["Negative", "TPS_1", "TPS_10", "TPS_50"];
+
+/** Non‑negative finite bucket totals (e.g. blended animation frames). */
+export function sanitizeBucketCounts(
+  raw: Record<PatchBucket, number> | null | undefined,
+): Record<PatchBucket, number> {
+  const out: Record<PatchBucket, number> = {
+    Negative: 0,
+    TPS_1: 0,
+    TPS_10: 0,
+    TPS_50: 0,
+  };
+  if (!raw) return out;
+  for (const b of BUCKET_ORDER) {
+    const v = raw[b];
+    const n = typeof v === "number" ? v : Number(v);
+    out[b] = Number.isFinite(n) && n > 0 ? n : 0;
+  }
+  return out;
+}
+
+export function sumBucketCounts(c: Record<PatchBucket, number>): number {
+  return BUCKET_ORDER.reduce((s, b) => s + c[b], 0);
+}
+
+/**
+ * Percents (one decimal) that sum to exactly **100.0** over the four clinical buckets,
+ * matching \(100\,n_b/N_{\mathrm{tot}}\) before rounding (largest remainder on tenths).
+ */
+export function displayBucketPercentsOneDecimalSum100(
+  counts: Record<PatchBucket, number>,
+  totalRaw: number,
+): Record<PatchBucket, number> {
+  const out: Record<PatchBucket, number> = {
+    Negative: 0,
+    TPS_1: 0,
+    TPS_10: 0,
+    TPS_50: 0,
+  };
+  if (totalRaw <= 1e-12) return out;
+
+  // Integer quotas in units of 0.1%  (1000 units = 100.0%)
+  const targets = BUCKET_ORDER.map((b) => (1000 * counts[b]) / totalRaw);
+  const floors = targets.map((t) => Math.floor(t + 1e-9));
+  const sumFloor = floors.reduce((a, b) => a + b, 0);
+  let remainder = Math.max(0, 1000 - sumFloor);
+
+  const idx = BUCKET_ORDER.map((_, i) => i);
+  idx.sort((i, j) => {
+    const fi = targets[i]! - floors[i]!;
+    const fj = targets[j]! - floors[j]!;
+    if (fj !== fi) return fj - fi;
+    return i - j;
+  });
+
+  const add = [0, 0, 0, 0];
+  for (let k = 0; k < remainder; k++) {
+    add[idx[k % idx.length]!]! += 1;
+  }
+
+  for (let i = 0; i < BUCKET_ORDER.length; i++) {
+    const b = BUCKET_ORDER[i]!;
+    out[b] = ((floors[i] ?? 0) + (add[i] ?? 0)) / 10;
+  }
+  return out;
+}
+
 export type TpsProportionalAxis = {
   /** Map TPS percent 0..100 to SVG x (same coord space as px0/plotW). */
   mapTpsToX: (tpsPercent: number) => number;
@@ -180,7 +247,7 @@ export type EqualPixelBarPlanOptions = {
  *   piecewise-linear proportional axis so that bar boundaries land exactly on the same
  *   x positions as the clinical-tier background bands.
  * - This guarantees: bars drawn under the "Negative" colour represent TPS ∈ [0,1)%,
- *   bars under "TPS_1" represent [1,10)%, etc. — i.e. total bar area within each band
+ *   bars under "TPS_1" represent [1,10)% (displayed as 1–9%), etc. — i.e. total bar area within each band
  *   equals that band's patch count, matching the TPS Allocation Band ratios.
  * - "Precision" per bar = (band TPS span) / (bars in that band) ∝ (band TPS span) / W_b,
  *   so wider visual bandwidth ⇒ finer TPS precision in that tier ("visual bandwidth"
