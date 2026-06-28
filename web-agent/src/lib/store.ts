@@ -12,7 +12,7 @@ import type {
   WorldRect,
 } from "@/lib/localRoiStats";
 import { patchesWithCellsForTps } from "@/lib/patchFilters";
-import { countPatchesByBucket } from "@/lib/tpsHistogram";
+import { countPatchesByBucket, patchBucketFromPredTps } from "@/lib/tpsHistogram";
 
 export type PanelLayer = "cell_class" | "center_prob" | "heatmap_overlay";
 
@@ -89,6 +89,9 @@ export interface ViewerState {
     summary: LocalSelectionSummary;
   } | null;
 
+  /** User-corrected bucket overrides (session-only, cleared on refresh or case switch). */
+  bucketOverrides: Record<string, PatchBucket>;
+
   /** KDE TPS heatmap overlay on the main WSI viewer (toggle). */
   tpsHeatmapVisible: boolean;
 
@@ -123,6 +126,9 @@ export interface ViewerState {
 
   setTpsHeatmapVisible: (visible: boolean) => void;
   toggleTpsHeatmap: () => void;
+
+  setBucketOverride: (patchId: string, bucket: PatchBucket) => void;
+  clearBucketOverride: (patchId: string) => void;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -168,6 +174,8 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   localRoiDrawMode: false,
   localRoi: null,
 
+  bucketOverrides: {},
+
   tpsHeatmapVisible: false,
 
   osdViewer: null,
@@ -203,6 +211,7 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
       localRoiDrawMode: false,
       localRoi: null,
       tpsHeatmapVisible: false,
+      bucketOverrides: {},
     });
     try {
       const manifest = await fetchJson<CaseManifest>(
@@ -286,6 +295,17 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   setTpsHeatmapVisible: (visible: boolean) => set({ tpsHeatmapVisible: visible }),
   toggleTpsHeatmap: () =>
     set((state) => ({ tpsHeatmapVisible: !state.tpsHeatmapVisible })),
+
+  setBucketOverride: (patchId: string, bucket: PatchBucket) =>
+    set((state) => ({
+      bucketOverrides: { ...state.bucketOverrides, [patchId]: bucket },
+    })),
+  clearBucketOverride: (patchId: string) =>
+    set((state) => {
+      const next = { ...state.bucketOverrides };
+      delete next[patchId];
+      return { bucketOverrides: next };
+    }),
 }));
 
 // ---------- selectors ----------
@@ -296,6 +316,30 @@ export function selectSelectedPatch(state: ViewerState): PatchEntry | null {
     state.manifest.patches.find((p) => p.patchId === state.selectedPatchId) ??
     null
   );
+}
+
+/** Bucket midpoint TPS (0–1 scale) for user-overridden patches. */
+const BUCKET_MIDPOINT_TPS: Record<PatchBucket, number> = {
+  Negative: 0.005,
+  TPS_1: 0.05,
+  TPS_10: 0.295,
+  TPS_50: 0.75,
+};
+
+export function getEffectiveBucket(
+  patch: PatchEntry,
+  overrides: Record<string, PatchBucket>,
+): PatchBucket {
+  return overrides[patch.patchId] ?? patchBucketFromPredTps(patch.patchPredTps);
+}
+
+export function getEffectiveTps(
+  patch: PatchEntry,
+  overrides: Record<string, PatchBucket>,
+): number {
+  const ov = overrides[patch.patchId];
+  if (!ov) return patch.patchPredTps;
+  return BUCKET_MIDPOINT_TPS[ov];
 }
 
 export interface CellStats {
@@ -342,6 +386,19 @@ export function computeCellStats(
   };
 }
 
+export function computePatchConfidence(
+  cells: CellRecord[] | null,
+  threshold: number,
+): number {
+  if (!cells || cells.length === 0) return 0;
+  let sum = 0;
+  for (const c of cells) {
+    sum += Math.abs(c.cellPosProb - threshold);
+  }
+  const raw = sum / cells.length;
+  return Math.min(1, raw / 0.5);
+}
+
 export interface WsiStats {
   patchCount: number;
   totalCells: number;
@@ -353,7 +410,10 @@ export interface WsiStats {
   negativeCells: number;
 }
 
-export function computeWsiStats(manifest: CaseManifest | null): WsiStats {
+export function computeWsiStats(
+  manifest: CaseManifest | null,
+  overrides?: Record<string, PatchBucket>,
+): WsiStats {
   if (!manifest) {
     return {
       patchCount: 0,
@@ -365,24 +425,35 @@ export function computeWsiStats(manifest: CaseManifest | null): WsiStats {
       negativeCells: 0,
     };
   }
+  const ov = overrides ?? {};
   const forTps = patchesWithCellsForTps(manifest.patches);
-  /** Same rule as histogram / allocation strip: bucket from scalar TPS, not CSV `patch_pred_bucket`. */
-  const bucketCounts = countPatchesByBucket(forTps);
+
+  const bucketCounts: Record<PatchBucket, number> = {
+    Negative: 0,
+    TPS_1: 0,
+    TPS_10: 0,
+    TPS_50: 0,
+  };
+  for (const p of forTps) {
+    bucketCounts[getEffectiveBucket(p, ov)]++;
+  }
 
   let totalCells = 0;
   let positiveCells = 0;
   let tpsSum = 0;
   let tpsMax = 0;
   for (const p of manifest.patches) {
+    const eTps = getEffectiveTps(p, ov);
     totalCells += p.numCells;
-    positiveCells += Math.round(p.patchPredTps * p.numCells);
+    positiveCells += Math.round(eTps * p.numCells);
   }
   positiveCells = Math.min(positiveCells, totalCells);
   const negativeCells = totalCells - positiveCells;
 
   for (const p of forTps) {
-    tpsSum += p.patchPredTps;
-    if (p.patchPredTps > tpsMax) tpsMax = p.patchPredTps;
+    const eTps = getEffectiveTps(p, ov);
+    tpsSum += eTps;
+    if (eTps > tpsMax) tpsMax = eTps;
   }
   return {
     patchCount: forTps.length,

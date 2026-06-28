@@ -14,7 +14,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useViewerStore } from "@/lib/store";
+import { useViewerStore, getEffectiveBucket, getEffectiveTps } from "@/lib/store";
 import { BUCKET_ORDER_LTR, BUCKET_STYLES, type BucketStyle } from "@/lib/bucket";
 import type { PatchBucket } from "@/types/case";
 import { patchesIntersectingRect } from "@/lib/localRoiStats";
@@ -129,6 +129,7 @@ export function TpsDistributionBar() {
   const manifest = useViewerStore((s) => s.manifest);
   const localRoi = useViewerStore((s) => s.localRoi);
   const setGalleryBucket = useViewerStore((s) => s.setGalleryBucket);
+  const bucketOverrides = useViewerStore((s) => s.bucketOverrides);
 
   const chartLayoutRef = useRef<HTMLDivElement>(null);
   const chartWrapRef = useRef<HTMLDivElement>(null);
@@ -244,17 +245,36 @@ export function TpsDistributionBar() {
     [manifest],
   );
 
-  const allCounts = useMemo(
+  const effectivePatches = useMemo(
     () =>
-      tpsPatches.length > 0 ? buildTpsPercentBins(tpsPatches) : emptyBins(),
-    [tpsPatches],
+      tpsPatches.map((p) => ({
+        ...p,
+        patchPredTps: getEffectiveTps(p, bucketOverrides),
+      })),
+    [tpsPatches, bucketOverrides],
   );
 
-  const bucketCounts = useMemo(
+  const allCounts = useMemo(
     () =>
-      tpsPatches.length > 0 ? countPatchesByBucket(tpsPatches) : null,
-    [tpsPatches],
+      effectivePatches.length > 0
+        ? buildTpsPercentBins(effectivePatches)
+        : emptyBins(),
+    [effectivePatches],
   );
+
+  const bucketCounts = useMemo(() => {
+    if (tpsPatches.length === 0) return null;
+    const counts: Record<PatchBucket, number> = {
+      Negative: 0,
+      TPS_1: 0,
+      TPS_10: 0,
+      TPS_50: 0,
+    };
+    for (const p of tpsPatches) {
+      counts[getEffectiveBucket(p, bucketOverrides)]++;
+    }
+    return counts;
+  }, [tpsPatches, bucketOverrides]);
 
   const roiPatchesInRect = useMemo(() => {
     if (!manifest || !localRoi) return null;
@@ -268,8 +288,12 @@ export function TpsDistributionBar() {
     const patches = patchesWithCellsForTps(
       patchesIntersectingRect(manifest, localRoi.world),
     );
-    return buildTpsPercentBins(patches);
-  }, [manifest, localRoi]);
+    const effective = patches.map((p) => ({
+      ...p,
+      patchPredTps: getEffectiveTps(p, bucketOverrides),
+    }));
+    return buildTpsPercentBins(effective);
+  }, [manifest, localRoi, bucketOverrides]);
 
   const roiSum = roiCounts ? sumBins(roiCounts) : 0;
   const hasRoi = Boolean(localRoi && roiCounts);
@@ -286,10 +310,19 @@ export function TpsDistributionBar() {
   /** Histogram + allocation strip always use proportional bands; ROI uses in-ROI bucket counts. */
   const targetBucketCounts = useMemo(() => {
     if (roiBarsOnly && roiPatchesInRect && roiPatchesInRect.length > 0) {
-      return countPatchesByBucket(roiPatchesInRect);
+      const counts: Record<PatchBucket, number> = {
+        Negative: 0,
+        TPS_1: 0,
+        TPS_10: 0,
+        TPS_50: 0,
+      };
+      for (const p of roiPatchesInRect) {
+        counts[getEffectiveBucket(p, bucketOverrides)]++;
+      }
+      return counts;
     }
     return bucketCounts ?? EMPTY_BUCKET_COUNTS;
-  }, [roiBarsOnly, roiPatchesInRect, bucketCounts]);
+  }, [roiBarsOnly, roiPatchesInRect, bucketCounts, bucketOverrides]);
 
   const distTargetKey = useMemo(
     () =>

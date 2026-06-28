@@ -7,12 +7,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   useViewerStore,
   computeCellStats,
+  computePatchConfidence,
   computeWsiStats,
   selectSelectedPatch,
+  getEffectiveBucket,
+  getEffectiveTps,
   type PanelLayer,
 } from "@/lib/store";
-import { BUCKET_STYLES } from "@/lib/bucket";
-import { patchBucketFromPredTps } from "@/lib/tpsHistogram";
+import { BUCKET_STYLES, BUCKET_ORDER, BUCKET_RANGE_LABELS } from "@/lib/bucket";
+import type { PatchBucket } from "@/types/case";
 import type { PatchEntry } from "@/types/case";
 import { formatPatchOriginXY } from "@/lib/patchDisplay";
 import { patchPreviewFileUrlFromEntry } from "@/lib/patchPreviewUrl";
@@ -52,13 +55,21 @@ function PatchCellStatsInline({ className }: { className?: string }) {
   const cellsStatus = useViewerStore((s) => s.cellsStatus);
   const patch = useViewerStore(selectSelectedPatch);
   const threshold = useViewerStore((s) => s.threshold);
+  const bucketOverrides = useViewerStore((s) => s.bucketOverrides);
+  const setBucketOverride = useViewerStore((s) => s.setBucketOverride);
+  const clearBucketOverride = useViewerStore((s) => s.clearBucketOverride);
   const stats = computeCellStats(cells, threshold);
+  const confidence = computePatchConfidence(cells, threshold);
 
-  const wsiStats = useMemo(() => computeWsiStats(manifest), [manifest]);
+  const wsiStats = useMemo(
+    () => computeWsiStats(manifest, bucketOverrides),
+    [manifest, bucketOverrides],
+  );
   const wsiDen = wsiStats.totalCells;
 
-  const predTps = patch ? clamp(patch.patchPredTps, 0, 1) : 0;
-  const bucket = patch ? patchBucketFromPredTps(patch.patchPredTps) : null;
+  const bucket = patch ? getEffectiveBucket(patch, bucketOverrides) : null;
+  const predTps = patch ? getEffectiveTps(patch, bucketOverrides) : 0;
+  const isOverridden = patch ? patch.patchId in bucketOverrides : false;
   const bucketStyle = bucket ? BUCKET_STYLES[bucket] : null;
   const bucketLabel = bucketStyle?.fullLabel ?? "—";
 
@@ -101,21 +112,51 @@ function PatchCellStatsInline({ className }: { className?: string }) {
       {/* Bucket → Total cells → Pred TPS (bar only on Pred TPS) */}
       <section className="flex shrink-0 flex-col gap-1.5 rounded-lg border border-border/60 bg-gradient-to-b from-muted/45 to-muted/20 px-2.5 py-1.5 shadow-sm dark:from-muted/20 dark:to-muted/10">
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-            patch_pred_bucket
-          </span>
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                TPS Bucket
+              </span>
+              {isOverridden && (
+                <button
+                  type="button"
+                  onClick={() => patch && clearBucketOverride(patch.patchId)}
+                  className="text-[9px] text-sky-400 hover:text-sky-300"
+                  title="Reset to model prediction"
+                >
+                  reset
+                </button>
+              )}
+            </div>
+            <span
+              className="shrink-0 font-mono text-[11px] tabular-nums leading-none text-white/85"
+              title="Patch confidence: mean |cellProb − threshold|, normalized"
+            >
+              {stats.total > 0 ? `conf ${(confidence * 100).toFixed(0)}%` : ""}
+            </span>
+          </div>
           <div className="flex min-w-0 items-center">
-            {patch && bucketStyle ? (
-              <span
+            {patch ? (
+              <select
+                value={bucket ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value as PatchBucket;
+                  if (val) setBucketOverride(patch.patchId, val);
+                }}
                 className={cn(
-                  "inline-flex max-w-full truncate rounded px-2 py-0.5 text-[12px] font-semibold leading-tight ring-1",
-                  bucketStyle.badgeBg,
-                  bucketStyle.badgeText,
-                  bucketStyle.badgeRing,
+                  "rounded border-none px-1.5 py-0.5 text-[12px] font-semibold leading-tight outline-none ring-1",
+                  bucketStyle?.badgeBg ?? "bg-muted",
+                  bucketStyle?.badgeText ?? "text-foreground",
+                  bucketStyle?.badgeRing ?? "ring-border",
+                  isOverridden && "ring-2 ring-sky-400/60",
                 )}
               >
-                {bucketLabel}
-              </span>
+                {BUCKET_ORDER.map((b) => (
+                  <option key={b} value={b}>
+                    {BUCKET_RANGE_LABELS[b]}
+                  </option>
+                ))}
+              </select>
             ) : (
               <span className="text-xs text-muted-foreground">—</span>
             )}
@@ -182,6 +223,7 @@ function PatchCellStatsInline({ className }: { className?: string }) {
           />
         </div>
       </section>
+
     </div>
   );
 }

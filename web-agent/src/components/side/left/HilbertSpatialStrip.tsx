@@ -105,14 +105,9 @@ export function HilbertSpatialStrip({
       style={{ paddingLeft: leftPad, paddingRight: rightPad }}
     >
       <div className="flex items-baseline justify-between gap-2">
-        <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/95">
+        <div className="text-[15px] font-medium uppercase tracking-wider text-muted-foreground/95">
           TPS Allocation Band
         </div>
-        {patchTotalDisplay != null && Number.isFinite(patchTotalDisplay) ? (
-          <div className="shrink-0 text-[9px] tabular-nums text-muted-foreground/90">
-            N_tot={Math.round(patchTotalDisplay).toLocaleString()}
-          </div>
-        ) : null}
       </div>
       <div
         ref={stripRef}

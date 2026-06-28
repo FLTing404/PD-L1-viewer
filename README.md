@@ -22,7 +22,7 @@ Case assets live under **`data/<caseId>/`** (e.g. `patches/`, `stitched.jpg`, op
 ```bash
 cd web-agent
 pnpm install
-
+pnpm build && pnpm start
 # AI Assistant needs a DeepSeek API key
 cp .env.local.example .env.local
 # Set DEEPSEEK_API_KEY=sk-xxxxxxxx in .env.local
@@ -46,10 +46,10 @@ Builds an English system prompt with WSI stats; if a patch is selected, includes
 
 ## Configuration (`web-agent`)
 
-| Env | Default | Notes |
-| --- | --- | --- |
-| `DEEPSEEK_API_KEY` | (none) | Without it, `/api/chat` returns 503 |
-| `CASES_ROOT` | `..\data` (from `web-agent`; resolves to `code/data`) | Root folder containing one subdirectory per case (e.g. `DI2025-020430_2025-03-19_14_16_26`) |
+| Env                  | Default                                                     | Notes                                                                                        |
+| -------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `DEEPSEEK_API_KEY` | (none)                                                      | Without it,`/api/chat` returns 503                                                         |
+| `CASES_ROOT`       | `..\data` (from `web-agent`; resolves to `code/data`) | Root folder containing one subdirectory per case (e.g.`DI2025-020430_2025-03-19_14_16_26`) |
 
 ### Large WSI (stitch + Deep Zoom)
 
@@ -63,13 +63,11 @@ If a case folder only has **`patches/`** and **`patches_manifest.csv`**, build a
    ```bash
    python data/script/build_stitched_from_patches.py DI2025-016679_2025-03-10_13_47_56
    ```
-
 2. **Deep Zoom** (requires **`vips`** on `PATH`):
 
    ```bash
    python data/script/build_dzi_from_stitched.py DI2025-016679_2025-03-10_13_47_56
    ```
-
 3. **Both** in one command:
 
    ```bash

@@ -62,7 +62,7 @@ export function SpecimenExplorer({ className }: { className?: string }) {
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden pr-0.5">
+      <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden pr-0.5 scrollbar-none">
         {loading && caseList.length === 0 ? null : caseListStatus === "error" ? (
           <div className="space-y-1.5 text-app-body text-destructive">
             <p className="font-medium">Failed to load case list.</p>

@@ -6,104 +6,26 @@ export type PredefinedQuestion = {
   template: string;
 };
 
+const DISCLAIMER =
+  "**Not a clinical diagnosis — physician confirmation is required.**";
+
 /** Template-only answers from precomputed fields (no free-form clinical claims). */
 export const PREDEFINED_QUESTIONS: PredefinedQuestion[] = [
   {
     id: "wsi_tps_overview",
     label: "Summarize TPS for this whole slide",
-    template: `Here's what the system has for this slide right now:
+    template: `### Whole-Slide TPS Summary
 
-- **Case** {{caseId}} · **WSI** {{wsiId}}
-- **Label export threshold** (UI-aligned): {{exportThreshold}}
-- **Patches counted**: {{wsiPatchCount}} · **Total cells**: {{wsiTotalCells}}
-- **Mean / max patch TPS**: {{wsiMeanTpsPct}}% / {{wsiMaxTpsPct}}%
-- **Highest-TPS patch** (among exported patches with cells): {{wsiHighestPatchId}} at {{wsiHighestPatchTpsPct}}% · bucket {{wsiHighestPatchBucket}} · WSI px={{wsiHighestPatchPx}}, py={{wsiHighestPatchPy}}
-- **Patches by bucket**: <1% {{wsiBucketNeg}}, 1–9% {{wsiBucket1}}, 10–49% {{wsiBucket10}}, ≥50% {{wsiBucket50}}
-- **Positive / negative cells** (patch TPS × cell counts): {{wsiPosCells}} / {{wsiNegCells}}
+| Metric | Value |
+|--------|-------|
+| Case / WSI | {{caseId}} / {{wsiId}} |
+| Patches counted | {{wsiPatchCount}} |
+| Total cells | {{wsiTotalCells}} |
+| Positive / negative cells | {{wsiPosCells}} / {{wsiNegCells}} |
+| Mean / max patch TPS | {{wsiMeanTpsPct}}% / {{wsiMaxTpsPct}}% |
+| Label export threshold | {{exportThreshold}} |
 
-These values are produced by this viewer’s pipeline (same rules as the charts). **They are not a clinical diagnosis—physician confirmation is required.**`,
-  },
-  {
-    id: "selection_roi_summary",
-    label: "What does my current ROI show?",
-    template: `{{roiReportMarkdown}}`,
-  },
-  {
-    id: "selected_patch_detail",
-    label: "Break down the patch I’ve selected",
-    template: `Details for the currently selected patch:
-
-- **Patch selected**: {{hasPatch}}
-- **Patch ID** {{patchId}} · **Bucket** {{patchBucket}} · **Patch TPS** {{patchTpsPct}}%
-- **Position** px={{patchPx}}, py={{patchPy}} · **Cells** {{patchNumCells}}
-- **At the current threshold**: positive {{patchPosCells}}, negative {{patchNegCells}}, positive fraction {{patchPosRatioPct}}%, mean positive prob. {{patchMeanCellProb}}
-
-**These metrics are not a clinical diagnosis—physician confirmation is required.**
-
-Pick a patch in the gallery or on the viewer to fill in the full row.`,
-  },
-  {
-    id: "wsi_hotspot",
-    label: "Where is the highest-TPS patch?",
-    template: `Slide-wide hotspot (among exported patches with cells):
-
-- **Patch ID**: {{wsiHighestPatchId}}
-- **TPS**: {{wsiHighestPatchTpsPct}}% · **Bucket**: {{wsiHighestPatchBucket}}
-- **WSI position**: px={{wsiHighestPatchPx}}, py={{wsiHighestPatchPy}}
-
-Use this as the starting point when hunting for the strongest staining focus on the slide map.
-
-**Not a clinical diagnosis—physician confirmation is required.**`,
-  },
-  {
-    id: "wsi_cell_balance",
-    label: "Positive vs negative cells (whole slide)",
-    template: `Whole-slide cell counts at the **interactive threshold you set** (cell-level labels use this threshold together with export metadata):
-
-- **Positive cells**: {{wsiPosCells}}
-- **Negative cells**: {{wsiNegCells}}
-- **Mean / max patch TPS**: {{wsiMeanTpsPct}}% / {{wsiMaxTpsPct}}%
-
-These rolls ups weight patch TPS by cell counts across patches.
-
-**Not a clinical diagnosis—physician confirmation is required.**`,
-  },
-  {
-    id: "roi_compare_wsi",
-    label: "Compare ROI to whole slide",
-    template: `ROI vs whole slide (same pipeline rules as the Selection ROI panel):
-
-- **ROI active**: {{hasRoi}}
-
-**Whole slide**
-- Mean patch TPS: {{wsiMeanTpsPct}}% · Patches: {{wsiPatchCount}} · Cells: {{wsiTotalCells}}
-- Buckets: <1% {{wsiBucketNeg}}, 1–9% {{wsiBucket1}}, 10–49% {{wsiBucket10}}, ≥50% {{wsiBucket50}}
-
-**ROI (when active)**
-- Mean TPS in ROI (cell-weighted): {{roiMeanTpsPct}}%
-- Patch slots: {{roiPatchCount}} · Cells: {{roiTotalCells}} · Pos / neg: {{roiPosCells}} / {{roiNegCells}}
-- Buckets: <1% {{roiBucketNeg}}, 1–9% {{roiBucket1}}, 10–49% {{roiBucket10}}, ≥50% {{roiBucket50}}
-
-If **ROI active** is No, draw a rectangle on the slide first to populate ROI metrics.
-
-**Not a clinical diagnosis—physician confirmation is required.**`,
-  },
-  {
-    id: "label_threshold",
-    label: "What threshold is used for cell labels?",
-    template: `Threshold context for this viewer session:
-
-- **Label export threshold** (manifest / UI-aligned exports): {{exportThreshold}}
-- **Interactive threshold** for patch-level summaries is sent with each request—the Selection ROI panel and patch stats update when you move it.
-
-Quick prompts use the threshold slider state plus manifest exports so numbers stay consistent with the charts.
-
-**Not a clinical diagnosis—physician confirmation is required.**`,
-  },
-  {
-    id: "wsi_patch_mix",
-    label: "How many patches per TPS band?",
-    template: `Clinical band counts for **exported patches with cells** (same denominator as the TPS Allocation strip):
+**Patches by TPS band:**
 
 | Band | Count |
 |------|-------|
@@ -112,9 +34,115 @@ Quick prompts use the threshold slider state plus manifest exports so numbers st
 | 10–49% | {{wsiBucket10}} |
 | ≥50% | {{wsiBucket50}} |
 
-**Total patches in roll-up**: {{wsiPatchCount}}
+**Highest-TPS patch:** {{wsiHighestPatchId}} at {{wsiHighestPatchTpsPct}}% ({{wsiHighestPatchBucket}}) — position ({{wsiHighestPatchPx}}, {{wsiHighestPatchPy}})
 
-**Not a clinical diagnosis—physician confirmation is required.**`,
+${DISCLAIMER}`,
+  },
+  {
+    id: "selection_roi_summary",
+    label: "What does my current ROI show?",
+    template: `{{roiReportMarkdown}}`,
+  },
+  {
+    id: "selected_patch_detail",
+    label: "Break down the patch I've selected",
+    template: `### Selected Patch Detail
+
+| Metric | Value |
+|--------|-------|
+| Patch selected | {{hasPatch}} |
+| Patch ID | {{patchId}} |
+| TPS bucket | {{patchBucket}} |
+| Patch TPS | {{patchTpsPct}}% |
+| Position | ({{patchPx}}, {{patchPy}}) |
+| Total cells | {{patchNumCells}} |
+| Positive / negative cells | {{patchPosCells}} / {{patchNegCells}} |
+| Positive fraction | {{patchPosRatioPct}}% |
+| Mean positive prob. | {{patchMeanCellProb}} |
+
+Pick a patch in the gallery or on the viewer to fill in the full row.
+
+${DISCLAIMER}`,
+  },
+  {
+    id: "wsi_hotspot",
+    label: "Where is the highest-TPS patch?",
+    template: `### Slide-Wide Hotspot
+
+| Metric | Value |
+|--------|-------|
+| Patch ID | {{wsiHighestPatchId}} |
+| TPS | {{wsiHighestPatchTpsPct}}% |
+| TPS bucket | {{wsiHighestPatchBucket}} |
+| Position | ({{wsiHighestPatchPx}}, {{wsiHighestPatchPy}}) |
+
+Use this as the starting point when hunting for the strongest staining focus on the slide map.
+
+${DISCLAIMER}`,
+  },
+  {
+    id: "wsi_cell_balance",
+    label: "Positive vs negative cells (whole slide)",
+    template: `### Whole-Slide Cell Balance
+
+| Metric | Value |
+|--------|-------|
+| Positive cells | {{wsiPosCells}} |
+| Negative cells | {{wsiNegCells}} |
+| Mean / max patch TPS | {{wsiMeanTpsPct}}% / {{wsiMaxTpsPct}}% |
+
+${DISCLAIMER}`,
+  },
+  {
+    id: "roi_compare_wsi",
+    label: "Compare ROI to whole slide",
+    template: `### ROI vs Whole Slide
+
+**ROI active:** {{hasRoi}}
+
+| Metric | Whole Slide | ROI |
+|--------|-------------|-----|
+| Mean patch TPS | {{wsiMeanTpsPct}}% | {{roiMeanTpsPct}}% |
+| Patches | {{wsiPatchCount}} | {{roiPatchCount}} |
+| Total cells | {{wsiTotalCells}} | {{roiTotalCells}} |
+| Positive / negative | {{wsiPosCells}} / {{wsiNegCells}} | {{roiPosCells}} / {{roiNegCells}} |
+| <1% | {{wsiBucketNeg}} | {{roiBucketNeg}} |
+| 1–9% | {{wsiBucket1}} | {{roiBucket1}} |
+| 10–49% | {{wsiBucket10}} | {{roiBucket10}} |
+| ≥50% | {{wsiBucket50}} | {{roiBucket50}} |
+
+If **ROI active** is No, draw a rectangle on the slide first to populate ROI metrics.
+
+${DISCLAIMER}`,
+  },
+  {
+    id: "label_threshold",
+    label: "What threshold is used for cell labels?",
+    template: `### Threshold Context
+
+| Metric | Value |
+|--------|-------|
+| Label export threshold | {{exportThreshold}} |
+
+The **interactive threshold** for patch-level summaries is sent with each request — the Selection ROI panel and patch stats update when you move it.
+
+${DISCLAIMER}`,
+  },
+  {
+    id: "wsi_patch_mix",
+    label: "How many patches per TPS band?",
+    template: `### Patches per TPS Band
+
+| Band | Count |
+|------|-------|
+| <1% | {{wsiBucketNeg}} |
+| 1–9% | {{wsiBucket1}} |
+| 10–49% | {{wsiBucket10}} |
+| ≥50% | {{wsiBucket50}} |
+
+**Total patches:** {{wsiPatchCount}}
+
+${DISCLAIMER}`,
   },
 ];
 

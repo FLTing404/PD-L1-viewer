@@ -10,7 +10,7 @@ import {
   useViewerStore,
 } from "@/lib/store";
 import { BUCKET_STYLES } from "@/lib/bucket";
-import { patchBucketFromPredTps } from "@/lib/tpsHistogram";
+import { getEffectiveBucket, getEffectiveTps } from "@/lib/store";
 import { formatPatchOriginXY } from "@/lib/patchDisplay";
 import { caseFileRelativeUrl } from "@/lib/patchPreviewUrl";
 import type { PatchEntry } from "@/types/case";
@@ -35,6 +35,7 @@ export function PatchGallery({
   const localRoi = useViewerStore((s) => s.localRoi);
   const setSelectedPatch = useViewerStore((s) => s.setSelectedPatch);
   const flyToPatch = useViewerStore((s) => s.flyToPatch);
+  const bucketOverrides = useViewerStore((s) => s.bucketOverrides);
 
   const pageSize =
     variant === "sidebar" ? GALLERY_PAGE_SIZE_SIDEBAR : GALLERY_PAGE_SIZE;
@@ -48,11 +49,11 @@ export function PatchGallery({
 
   const filtered: PatchEntry[] = useMemo(() => {
     const base = patchesWithCellsForTps(manifest?.patches ?? []).filter(
-      (p) => patchBucketFromPredTps(p.patchPredTps) === galleryBucket,
+      (p) => getEffectiveBucket(p, bucketOverrides) === galleryBucket,
     );
     if (!roiPatchIdSet) return base;
     return base.filter((p) => roiPatchIdSet.has(p.patchId));
-  }, [manifest, galleryBucket, roiPatchIdSet]);
+  }, [manifest, galleryBucket, roiPatchIdSet, bucketOverrides]);
 
   const roiKey = localRoi
     ? `${localRoi.world.x},${localRoi.world.y},${localRoi.world.w},${localRoi.world.h}`
@@ -60,7 +61,9 @@ export function PatchGallery({
   useEffect(() => {
     setGalleryPage(0);
   }, [roiKey, galleryBucket, setGalleryPage]);
-  const sorted = [...filtered].sort((a, b) => b.patchPredTps - a.patchPredTps);
+  const sorted = [...filtered].sort(
+    (a, b) => getEffectiveTps(b, bucketOverrides) - getEffectiveTps(a, bucketOverrides),
+  );
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const page = Math.min(galleryPage, totalPages - 1);
   const startIdx = page * pageSize;
@@ -106,11 +109,11 @@ export function PatchGallery({
           <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overflow-x-hidden pr-0.5">
             {pageItems.map((p) => {
               const isActive = p.patchId === selectedPatchId;
-              const tpsPct = formatTpsPercentDigits(p.patchPredTps);
+              const tpsPct = formatTpsPercentDigits(getEffectiveTps(p, bucketOverrides));
               const thumbUrl = caseId
                 ? caseFileRelativeUrl(caseId, p.imageFile)
                 : "";
-              const bucketStyle = BUCKET_STYLES[patchBucketFromPredTps(p.patchPredTps)];
+              const bStyle = BUCKET_STYLES[getEffectiveBucket(p, bucketOverrides)];
               const xyLabel = formatPatchOriginXY(p);
               return (
                 <button
@@ -151,7 +154,7 @@ export function PatchGallery({
                         <span
                           className={cn(
                             "font-mono font-semibold tabular-nums",
-                            isActive ? "text-red-300" : bucketStyle.text,
+                            isActive ? "text-red-300" : bStyle.text,
                           )}
                         >
                           {tpsPct}%
@@ -173,11 +176,11 @@ export function PatchGallery({
             <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10">
               {pageItems.map((p) => {
                 const isActive = p.patchId === selectedPatchId;
-                const tpsPct = formatTpsPercentDigits(p.patchPredTps);
+                const tpsPct = formatTpsPercentDigits(getEffectiveTps(p, bucketOverrides));
                 const thumbUrl = caseId
                   ? caseFileRelativeUrl(caseId, p.imageFile)
                   : "";
-                const bucketStyle = BUCKET_STYLES[patchBucketFromPredTps(p.patchPredTps)];
+                const bStyle = BUCKET_STYLES[getEffectiveBucket(p, bucketOverrides)];
                 return (
                   <button
                     key={p.patchId}
@@ -187,7 +190,7 @@ export function PatchGallery({
                       "group flex flex-col overflow-hidden rounded-md ring-1 transition-all",
                       isActive
                         ? "ring-2 ring-red-500"
-                        : cn("ring-border hover:ring-2", bucketStyle.ring),
+                        : cn("ring-border hover:ring-2", bStyle.ring),
                     )}
                     title={`${p.patchId} · ${formatPatchOriginXY(p)}`}
                   >
@@ -205,7 +208,7 @@ export function PatchGallery({
                     <span
                       className={cn(
                         "text-app-body py-0.5 text-center font-mono font-semibold tabular-nums leading-none",
-                        isActive ? "text-red-300" : bucketStyle.text,
+                        isActive ? "text-red-300" : bStyle.text,
                       )}
                     >
                       {tpsPct}%

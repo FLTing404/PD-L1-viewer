@@ -4,8 +4,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import { useOsdViewer } from "./ViewerContext";
 import { makeRoiRegionFrame, makePatchSeverityFrame } from "./viewerRegionFrame";
 import { BUCKET_STYLES } from "@/lib/bucket";
-import { patchBucketFromPredTps } from "@/lib/tpsHistogram";
-import { useViewerStore } from "@/lib/store";
+import { useViewerStore, getEffectiveBucket } from "@/lib/store";
 import type { PatchEntry } from "@/types/case";
 
 /** WSI: dashed ROI + thin solid bucket-coloured frame on selected / worst-in-ROI patch. */
@@ -14,13 +13,16 @@ export function PatchOverlay() {
   const manifest = useViewerStore((s) => s.manifest);
   const selectedPatchId = useViewerStore((s) => s.selectedPatchId);
   const localRoi = useViewerStore((s) => s.localRoi);
+  const bucketOverrides = useViewerStore((s) => s.bucketOverrides);
   const ownOverlaysRef = useRef<HTMLElement[]>([]);
 
   /** Avoid re-subscribing OSD handlers on every patch click (was causing full viewer flash). */
   const selectedPatchIdRef = useRef(selectedPatchId);
   const localRoiRef = useRef(localRoi);
+  const bucketOverridesRef = useRef(bucketOverrides);
   selectedPatchIdRef.current = selectedPatchId;
   localRoiRef.current = localRoi;
+  bucketOverridesRef.current = bucketOverrides;
 
   const refreshRef = useRef<(() => void) | null>(null);
 
@@ -73,7 +75,7 @@ export function PatchOverlay() {
           const iw = sel.width * meta.thumbScaleX;
           const ih = sel.height * meta.thumbScaleY;
           const rect = viewer.viewport.imageToViewportRectangle(ix, iy, iw, ih);
-          const bucket = patchBucketFromPredTps(sel.patchPredTps);
+          const bucket = getEffectiveBucket(sel, bucketOverridesRef.current);
           const hex = BUCKET_STYLES[bucket].hex;
           const el = makePatchSeverityFrame(hex);
           viewer.addOverlay({
@@ -101,7 +103,7 @@ export function PatchOverlay() {
 
   useLayoutEffect(() => {
     refreshRef.current?.();
-  }, [selectedPatchId, localRoi]);
+  }, [selectedPatchId, localRoi, bucketOverrides]);
 
   return null;
 }

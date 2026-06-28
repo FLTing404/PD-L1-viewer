@@ -39,8 +39,12 @@ export function SelectionRoiPanel({
   const manifest = useViewerStore((s) => s.manifest);
   const localRoi = useViewerStore((s) => s.localRoi);
   const clearLocalRoi = useViewerStore((s) => s.clearLocalRoi);
+  const bucketOverrides = useViewerStore((s) => s.bucketOverrides);
 
-  const wsiStats = useMemo(() => computeWsiStats(manifest), [manifest]);
+  const wsiStats = useMemo(
+    () => computeWsiStats(manifest, bucketOverrides),
+    [manifest, bucketOverrides],
+  );
 
   const roiMeanTps = useMemo(() => {
     if (!manifest || !localRoi) return 0;

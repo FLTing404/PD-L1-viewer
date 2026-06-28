@@ -338,16 +338,16 @@ export function caseStatsToTemplateFields(s: CaseStatsSnapshot): TemplateFields 
     caseId: s.caseId,
     wsiId: s.wsiId,
     exportThreshold: String(s.exportThresholdUsedForLabels),
-    wsiPatchCount: String(s.wsi.patchCount),
-    wsiTotalCells: String(s.wsi.totalCells),
+    wsiPatchCount: fmtCountEn(s.wsi.patchCount),
+    wsiTotalCells: fmtCountEn(s.wsi.totalCells),
     wsiMeanTpsPct: formatTpsPercentDigits(s.wsi.meanTps),
     wsiMaxTpsPct: formatTpsPercentDigits(s.wsi.maxTps),
-    wsiPosCells: String(s.wsi.positiveCells),
-    wsiNegCells: String(s.wsi.negativeCells),
-    wsiBucketNeg: String(bc.Negative ?? 0),
-    wsiBucket1: String(bc.TPS_1 ?? 0),
-    wsiBucket10: String(bc.TPS_10 ?? 0),
-    wsiBucket50: String(bc.TPS_50 ?? 0),
+    wsiPosCells: fmtCountEn(s.wsi.positiveCells),
+    wsiNegCells: fmtCountEn(s.wsi.negativeCells),
+    wsiBucketNeg: fmtCountEn(bc.Negative ?? 0),
+    wsiBucket1: fmtCountEn(bc.TPS_1 ?? 0),
+    wsiBucket10: fmtCountEn(bc.TPS_10 ?? 0),
+    wsiBucket50: fmtCountEn(bc.TPS_50 ?? 0),
     ...(s.wsiHighestTpsPatch
       ? {
           wsiHighestPatchId: s.wsiHighestTpsPatch.patchId,
@@ -357,8 +357,8 @@ export function caseStatsToTemplateFields(s: CaseStatsSnapshot): TemplateFields 
           wsiHighestPatchBucket: formatPatchBucketLabel(
             s.wsiHighestTpsPatch.patchPredBucket,
           ),
-          wsiHighestPatchPx: String(s.wsiHighestTpsPatch.px),
-          wsiHighestPatchPy: String(s.wsiHighestTpsPatch.py),
+          wsiHighestPatchPx: coordInt(s.wsiHighestTpsPatch.px),
+          wsiHighestPatchPy: coordInt(s.wsiHighestTpsPatch.py),
         }
       : {
           wsiHighestPatchId: "—",
@@ -376,16 +376,16 @@ export function caseStatsToTemplateFields(s: CaseStatsSnapshot): TemplateFields 
         patchId: p.patchId,
         patchBucket: formatPatchBucketLabel(p.patchPredBucket),
         patchTpsPct: formatTpsPercentDigits(p.patchPredTps),
-        patchNumCells: String(p.numCells),
-        patchPx: String(p.px),
-        patchPy: String(p.py),
+        patchNumCells: fmtCountEn(p.numCells),
+        patchPx: coordInt(p.px),
+        patchPy: coordInt(p.py),
         patchPosCells:
           p.cellStatsAtThreshold != null
-            ? String(p.cellStatsAtThreshold.positive)
+            ? fmtCountEn(p.cellStatsAtThreshold.positive)
             : "—",
         patchNegCells:
           p.cellStatsAtThreshold != null
-            ? String(p.cellStatsAtThreshold.negative)
+            ? fmtCountEn(p.cellStatsAtThreshold.negative)
             : "—",
         patchPosRatioPct:
           p.cellStatsAtThreshold != null
@@ -414,20 +414,20 @@ export function caseStatsToTemplateFields(s: CaseStatsSnapshot): TemplateFields 
   const roiBlock: TemplateFields = r
     ? {
         hasRoi: "Yes",
-        roiPatchCount: String(r.summary.patchCount),
-        roiSynthPatchCount: String(r.summary.syntheticPatchCount),
-        roiTotalCells: String(r.summary.totalCells),
-        roiPosCells: String(r.summary.positiveCells),
-        roiNegCells: String(r.summary.negativeCells),
+        roiPatchCount: fmtCountEn(r.summary.patchCount),
+        roiSynthPatchCount: fmtCountEn(r.summary.syntheticPatchCount),
+        roiTotalCells: fmtCountEn(r.summary.totalCells),
+        roiPosCells: fmtCountEn(r.summary.positiveCells),
+        roiNegCells: fmtCountEn(r.summary.negativeCells),
         roiMeanTpsPct: formatTpsPercentDigits(r.meanTpsInRoi),
-        roiBucketNeg: String(r.bucketCounts.Negative),
-        roiBucket1: String(r.bucketCounts.TPS_1),
-        roiBucket10: String(r.bucketCounts.TPS_10),
-        roiBucket50: String(r.bucketCounts.TPS_50),
-        roiX: r.snapped.x.toFixed(0),
-        roiY: r.snapped.y.toFixed(0),
-        roiW: r.snapped.w.toFixed(0),
-        roiH: r.snapped.h.toFixed(0),
+        roiBucketNeg: fmtCountEn(r.bucketCounts.Negative),
+        roiBucket1: fmtCountEn(r.bucketCounts.TPS_1),
+        roiBucket10: fmtCountEn(r.bucketCounts.TPS_10),
+        roiBucket50: fmtCountEn(r.bucketCounts.TPS_50),
+        roiX: coordInt(r.snapped.x),
+        roiY: coordInt(r.snapped.y),
+        roiW: coordInt(r.snapped.w),
+        roiH: coordInt(r.snapped.h),
       }
     : {
         hasRoi: "No",

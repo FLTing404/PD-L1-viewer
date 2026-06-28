@@ -179,6 +179,13 @@
     font-size: var(--app-panel-body);
     line-height: 1.45;
   }
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
 }
 
 /* OpenSeadragon navigator: drop the heavy default border so the floating
